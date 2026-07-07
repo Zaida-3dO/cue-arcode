@@ -11,6 +11,7 @@ import {
   deleteRedirect,
   listStyleVersions,
   saveStyleVersion,
+  deleteAllStyleHistory,
   type RedirectDto,
   type StyleVersionDto,
 } from './api.js';
@@ -70,19 +71,57 @@ const PRESETS: Record<string, Partial<AppQrOptions>> = {
   },
 };
 
+type View = 'list' | 'detail' | 'qr-studio' | 'settings';
+
+type ThemeChoice = 'system' | 'light' | 'dark';
+const THEME_STORAGE_KEY = 'cuearcode-theme';
+
 export function initUi(): void {
   let options: AppQrOptions = defaultOptions(`${REDIRECT_BASE_URL}/example`);
   let redirects: RedirectDto[] = [];
   let selectedSlug: string | null = null;
   let qr: QRCodeStyling | undefined;
 
+  // Detail view is currently showing this slug (or null when not on that view).
+  let detailSlug: string | null = null;
+  // Which detail-view slug QR Studio was opened *from*, so its back button
+  // returns there rather than jumping all the way to the top-level list.
+  let qrStudioOrigin: string | null = null;
+  let currentView: View = 'list';
+
   const els = {
+    // Nav + views
+    navRedirects: byId<HTMLAnchorElement>('nav-redirects'),
+    navSettings: byId<HTMLAnchorElement>('nav-settings'),
+    viewList: byId<HTMLElement>('view-list'),
+    viewDetail: byId<HTMLElement>('view-detail'),
+    viewQrStudio: byId<HTMLElement>('view-qr-studio'),
+    viewSettings: byId<HTMLElement>('view-settings'),
+
+    // List view
+    newRedirectToggle: byId<HTMLButtonElement>('new-redirect-toggle'),
+    newRedirectCancel: byId<HTMLButtonElement>('new-redirect-cancel'),
     createForm: byId<HTMLFormElement>('create-redirect-form'),
     newSlug: byId<HTMLInputElement>('new-slug'),
+    newDisplayName: byId<HTMLInputElement>('new-display-name'),
     newTargetUrl: byId<HTMLInputElement>('new-target-url'),
     createStatus: byId<HTMLParagraphElement>('create-redirect-status'),
     redirectList: byId<HTMLUListElement>('redirect-list'),
 
+    // Detail view
+    detailBackBtn: byId<HTMLButtonElement>('detail-back-btn'),
+    detailDisplayName: byId<HTMLHeadingElement>('detail-display-name'),
+    detailSlug: byId<HTMLElement>('detail-slug'),
+    detailForm: byId<HTMLFormElement>('detail-form'),
+    detailDisplayNameInput: byId<HTMLInputElement>('detail-display-name-input'),
+    detailTargetUrlInput: byId<HTMLInputElement>('detail-target-url-input'),
+    detailSaveStatus: byId<HTMLParagraphElement>('detail-save-status'),
+    detailRedirectUrl: byId<HTMLElement>('detail-redirect-url'),
+    detailGenerateQrBtn: byId<HTMLButtonElement>('detail-generate-qr-btn'),
+    detailDeleteBtn: byId<HTMLButtonElement>('detail-delete-btn'),
+
+    // QR Studio view
+    qrBackBtn: byId<HTMLButtonElement>('qr-back-btn'),
     activeSlug: byId<HTMLSelectElement>('active-slug'),
     qrData: byId<HTMLInputElement>('qr-data'),
 
@@ -130,7 +169,68 @@ export function initUi(): void {
     saveStyleBtn: byId<HTMLButtonElement>('save-style-btn'),
     saveStyleStatus: byId<HTMLParagraphElement>('save-style-status'),
     styleHistory: byId<HTMLUListElement>('style-history'),
+
+    // Settings view
+    themeSelect: byId<HTMLSelectElement>('theme-select'),
+    wipeHistoryBtn: byId<HTMLButtonElement>('wipe-history-btn'),
+    wipeHistoryStatus: byId<HTMLParagraphElement>('wipe-history-status'),
   };
+
+  // ---- View navigation ----
+
+  function showView(view: View): void {
+    currentView = view;
+    els.viewList.hidden = view !== 'list';
+    els.viewDetail.hidden = view !== 'detail';
+    els.viewQrStudio.hidden = view !== 'qr-studio';
+    els.viewSettings.hidden = view !== 'settings';
+    // "Redirects" stays highlighted for detail/QR-studio too — they're both
+    // reached from within the redirects flow, not independent top-level areas.
+    els.navRedirects.classList.toggle('active', view === 'list' || view === 'detail' || view === 'qr-studio');
+    els.navSettings.classList.toggle('active', view === 'settings');
+  }
+
+  els.navRedirects.addEventListener('click', (e) => {
+    e.preventDefault();
+    showView('list');
+  });
+  els.navSettings.addEventListener('click', (e) => {
+    e.preventDefault();
+    showView('settings');
+  });
+
+  // ---- Theme (Settings) ----
+
+  function applyTheme(choice: ThemeChoice): void {
+    if (choice === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', choice);
+    }
+  }
+
+  function loadStoredTheme(): ThemeChoice {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    return stored === 'light' || stored === 'dark' ? stored : 'system';
+  }
+
+  function initTheme(): void {
+    // The inline <head> script already stamped data-theme (if a stored
+    // override exists) before first paint — this just brings the Settings
+    // control's displayed value in sync with that on boot.
+    const choice = loadStoredTheme();
+    els.themeSelect.value = choice;
+  }
+
+  els.themeSelect.addEventListener('change', () => {
+    const choice = els.themeSelect.value as ThemeChoice;
+    if (choice === 'system') {
+      localStorage.removeItem(THEME_STORAGE_KEY);
+    } else {
+      localStorage.setItem(THEME_STORAGE_KEY, choice);
+    }
+    applyTheme(choice);
+  });
 
   function syncControlsFromOptions(): void {
     els.qrData.value = options.data;
@@ -253,69 +353,171 @@ export function initUi(): void {
     }
   }
 
-  // ---- Redirect management ----
+  // ---- Redirect list (cards) ----
 
   function renderRedirectList(): void {
     els.redirectList.innerHTML = '';
-    els.activeSlug.innerHTML = '';
 
+    for (const r of redirects) {
+      const li = document.createElement('li');
+      li.className = 'redirect-card';
+
+      // Everything below is built via createElement + textContent, never
+      // innerHTML interpolation: display_name and target_url are both
+      // attacker-influenced (a redirect's label and target), so
+      // string-templating either into innerHTML would be a stored-XSS sink.
+      // textContent escapes everything — same discipline for both fields.
+      const body = document.createElement('div');
+      body.className = 'card-body';
+      body.tabIndex = 0;
+      body.setAttribute('role', 'button');
+      body.setAttribute('aria-label', `View redirect ${r.display_name}`);
+
+      const title = document.createElement('div');
+      title.className = 'card-title';
+      title.textContent = r.display_name;
+      body.appendChild(title);
+
+      const shortRow = document.createElement('div');
+      shortRow.className = 'card-row';
+      const shortLabel = document.createElement('span');
+      shortLabel.className = 'card-label';
+      shortLabel.textContent = 'Short link';
+      const shortValue = document.createElement('code');
+      shortValue.className = 'card-value';
+      shortValue.textContent = r.redirect_url;
+      shortRow.append(shortLabel, shortValue);
+      body.appendChild(shortRow);
+
+      const targetRow = document.createElement('div');
+      targetRow.className = 'card-row';
+      const targetLabel = document.createElement('span');
+      targetLabel.className = 'card-label';
+      targetLabel.textContent = 'Points to';
+      const targetValue = document.createElement('code');
+      targetValue.className = 'card-value card-value-wrap';
+      targetValue.textContent = r.target_url;
+      targetRow.append(targetLabel, targetValue);
+      body.appendChild(targetRow);
+
+      const openThisDetail = () => openDetail(r.slug);
+      body.addEventListener('click', openThisDetail);
+      body.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openThisDetail();
+        }
+      });
+
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'danger-btn';
+      delBtn.textContent = 'Delete';
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        void removeRedirect(r.slug);
+      });
+      actions.appendChild(delBtn);
+
+      li.append(body, actions);
+      els.redirectList.appendChild(li);
+    }
+  }
+
+  function renderActiveSlugOptions(): void {
+    els.activeSlug.innerHTML = '';
     const noneOpt = document.createElement('option');
     noneOpt.value = '';
     noneOpt.textContent = '(ad-hoc — not tied to a slug)';
     els.activeSlug.appendChild(noneOpt);
 
     for (const r of redirects) {
-      const li = document.createElement('li');
-      // Build via textContent, never innerHTML interpolation: r.target_url is
-      // attacker-influenced (a redirect's target), so string-templating it into
-      // innerHTML is a stored-XSS sink. textContent escapes everything.
-      const info = document.createElement('div');
-      const slugEl = document.createElement('strong');
-      slugEl.textContent = r.slug;
-      const targetEl = document.createElement('code');
-      targetEl.textContent = r.target_url;
-      const redirectEl = document.createElement('code');
-      redirectEl.textContent = r.redirect_url;
-      info.append(slugEl, document.createTextNode(' → '), targetEl, document.createElement('br'), redirectEl);
-      li.appendChild(info);
-
-      const actions = document.createElement('div');
-      actions.className = 'row-actions';
-
-      const useBtn = document.createElement('button');
-      useBtn.type = 'button';
-      useBtn.textContent = 'Use for QR';
-      useBtn.addEventListener('click', () => void selectSlug(r.slug));
-      actions.appendChild(useBtn);
-
-      const editBtn = document.createElement('button');
-      editBtn.type = 'button';
-      editBtn.textContent = 'Edit target';
-      editBtn.addEventListener('click', () => void editRedirect(r.slug, r.target_url));
-      actions.appendChild(editBtn);
-
-      const delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.textContent = 'Delete';
-      delBtn.addEventListener('click', () => void removeRedirect(r.slug));
-      actions.appendChild(delBtn);
-
-      li.appendChild(actions);
-      els.redirectList.appendChild(li);
-
       const opt = document.createElement('option');
       opt.value = r.slug;
       opt.textContent = r.slug;
       els.activeSlug.appendChild(opt);
     }
-
     els.activeSlug.value = selectedSlug ?? '';
   }
 
   async function refreshRedirects(): Promise<void> {
     redirects = await listRedirects();
     renderRedirectList();
+    renderActiveSlugOptions();
   }
+
+  // ---- Detail view ----
+
+  function openDetail(slug: string): void {
+    const row = redirects.find((r) => r.slug === slug);
+    if (!row) return;
+    detailSlug = slug;
+    els.detailDisplayName.textContent = row.display_name;
+    els.detailSlug.textContent = row.slug;
+    els.detailDisplayNameInput.value = row.display_name;
+    els.detailTargetUrlInput.value = row.target_url;
+    els.detailRedirectUrl.textContent = row.redirect_url;
+    els.detailSaveStatus.textContent = '';
+    showView('detail');
+  }
+
+  els.detailBackBtn.addEventListener('click', () => {
+    showView('list');
+  });
+
+  els.detailForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    void (async () => {
+      if (!detailSlug) return;
+      const slug = detailSlug;
+      const row = redirects.find((r) => r.slug === slug);
+      if (!row) return;
+
+      const nextDisplayName = els.detailDisplayNameInput.value.trim();
+      const nextTargetUrl = els.detailTargetUrlInput.value.trim();
+      const updates: { targetUrl?: string; displayName?: string } = {};
+      if (nextTargetUrl !== row.target_url) updates.targetUrl = nextTargetUrl;
+      if (nextDisplayName !== row.display_name) updates.displayName = nextDisplayName;
+
+      if (Object.keys(updates).length === 0) {
+        els.detailSaveStatus.textContent = 'No changes to save.';
+        return;
+      }
+
+      try {
+        const { cloudflare } = await updateRedirect(slug, updates);
+        els.detailSaveStatus.textContent = cloudflare.ok
+          ? 'Saved.'
+          : `Saved locally — Cloudflare sync failed: ${cloudflare.error ?? 'unknown error'}`;
+        await refreshRedirects();
+        openDetail(slug);
+      } catch (err) {
+        els.detailSaveStatus.textContent = `Failed to save: ${(err as Error).message}`;
+      }
+    })();
+  });
+
+  els.detailGenerateQrBtn.addEventListener('click', () => {
+    if (!detailSlug) return;
+    const slug = detailSlug;
+    qrStudioOrigin = slug;
+    void (async () => {
+      await selectSlug(slug);
+      showView('qr-studio');
+    })();
+  });
+
+  els.detailDeleteBtn.addEventListener('click', () => {
+    if (!detailSlug) return;
+    const slug = detailSlug;
+    void (async () => {
+      const deleted = await removeRedirect(slug);
+      if (deleted) showView('list');
+    })();
+  });
 
   async function selectSlug(slug: string): Promise<void> {
     selectedSlug = slug;
@@ -323,55 +525,58 @@ export function initUi(): void {
     if (row) {
       options.data = row.redirect_url;
     }
-    renderRedirectList();
+    els.activeSlug.value = slug;
     syncControlsFromOptions();
     scheduleRender();
     await refreshHistory();
   }
 
-  async function editRedirect(slug: string, currentTarget: string): Promise<void> {
-    const next = window.prompt(`New target URL for '${slug}'`, currentTarget);
-    if (!next || next === currentTarget) return;
-    try {
-      const { cloudflare } = await updateRedirect(slug, next);
-      els.createStatus.textContent = cloudflare.ok
-        ? `Updated '${slug}' (Cloudflare synced).`
-        : `Updated '${slug}' locally — Cloudflare sync failed: ${cloudflare.error ?? 'unknown error'}`;
-      await refreshRedirects();
-    } catch (err) {
-      els.createStatus.textContent = `Failed to update '${slug}': ${(err as Error).message}`;
-    }
-  }
-
-  async function removeRedirect(slug: string): Promise<void> {
-    if (!window.confirm(`Delete redirect '${slug}'?`)) return;
+  /** Confirms, deletes, and refreshes the list. Returns whether it actually deleted. */
+  async function removeRedirect(slug: string): Promise<boolean> {
+    if (!window.confirm(`Delete redirect '${slug}'?`)) return false;
     try {
       const { cloudflare } = await deleteRedirect(slug);
       els.createStatus.textContent = cloudflare.ok
         ? `Deleted '${slug}' (Cloudflare synced).`
         : `Deleted '${slug}' locally — Cloudflare sync failed: ${cloudflare.error ?? 'unknown error'}`;
       if (selectedSlug === slug) selectedSlug = null;
+      if (detailSlug === slug) detailSlug = null;
       await refreshRedirects();
+      return true;
     } catch (err) {
       els.createStatus.textContent = `Failed to delete '${slug}': ${(err as Error).message}`;
+      return false;
     }
   }
+
+  // ---- Create redirect (list view) ----
+
+  els.newRedirectToggle.addEventListener('click', () => {
+    els.createForm.hidden = !els.createForm.hidden;
+    if (!els.createForm.hidden) els.newSlug.focus();
+  });
+
+  els.newRedirectCancel.addEventListener('click', () => {
+    els.createForm.reset();
+    els.createForm.hidden = true;
+    els.createStatus.textContent = '';
+  });
 
   els.createForm.addEventListener('submit', (e) => {
     e.preventDefault();
     void (async () => {
       const slug = els.newSlug.value.trim();
       const targetUrl = els.newTargetUrl.value.trim();
+      const displayName = els.newDisplayName.value.trim();
       try {
-        const { cloudflare } = await createRedirect(slug, targetUrl);
+        const { cloudflare } = await createRedirect(slug, targetUrl, displayName || undefined);
         els.createStatus.textContent = cloudflare.ok
           ? `Created '${slug}' (Cloudflare synced).`
           : `Created '${slug}' locally — Cloudflare sync failed: ${cloudflare.error ?? 'unknown error'} ` +
             '(expected until the Bulk Redirects list exists).';
-        els.newSlug.value = '';
-        els.newTargetUrl.value = '';
+        els.createForm.reset();
+        els.createForm.hidden = true;
         await refreshRedirects();
-        await selectSlug(slug);
       } catch (err) {
         els.createStatus.textContent = `Failed to create redirect: ${(err as Error).message}`;
       }
@@ -380,6 +585,16 @@ export function initUi(): void {
 
   els.activeSlug.addEventListener('change', () => {
     if (els.activeSlug.value) void selectSlug(els.activeSlug.value);
+  });
+
+  // ---- QR Studio back navigation ----
+
+  els.qrBackBtn.addEventListener('click', () => {
+    if (qrStudioOrigin) {
+      openDetail(qrStudioOrigin);
+    } else {
+      showView('list');
+    }
   });
 
   // ---- Preset buttons ----
@@ -592,9 +807,29 @@ export function initUi(): void {
     })();
   });
 
+  // ---- Settings: wipe style history ----
+
+  els.wipeHistoryBtn.addEventListener('click', () => {
+    const confirmed = window.confirm(
+      'This permanently deletes ALL saved QR style history for every redirect. This cannot be undone.',
+    );
+    if (!confirmed) return;
+    void (async () => {
+      try {
+        const { deleted } = await deleteAllStyleHistory();
+        els.wipeHistoryStatus.textContent = `Wiped ${deleted} saved style version${deleted === 1 ? '' : 's'}.`;
+        if (selectedSlug) await refreshHistory();
+      } catch (err) {
+        els.wipeHistoryStatus.textContent = `Failed to wipe history: ${(err as Error).message}`;
+      }
+    })();
+  });
+
   // ---- Boot ----
 
+  initTheme();
   syncControlsFromOptions();
   scheduleRender();
+  showView(currentView);
   void refreshRedirects();
 }

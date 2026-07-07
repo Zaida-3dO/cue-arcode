@@ -11,32 +11,98 @@
   <link rel="manifest" href="/site.webmanifest" />
   <meta name="theme-color" content="#d34c50" />
   <link rel="stylesheet" href="/styles.css" />
+  <script>
+    // Inline + synchronous so the explicit theme override (if any) is stamped
+    // before first paint — avoids a flash of the wrong theme that a
+    // bundle.js-deferred version would cause. Mirrors the logic in
+    // frontend/src/ui.ts's initTheme(); kept tiny and dependency-free on
+    // purpose since it must run before any other script.
+    (function () {
+      try {
+        var stored = localStorage.getItem('cuearcode-theme');
+        if (stored === 'light' || stored === 'dark') {
+          document.documentElement.setAttribute('data-theme', stored);
+        }
+      } catch (e) {
+        // localStorage unavailable (private mode, etc.) — fall back to the
+        // prefers-color-scheme media query, which still works unaided.
+      }
+    })();
+  </script>
 </head>
 <body>
   <header class="topbar">
-    <h1>CueArcode</h1>
-    <p class="subtitle">QR code generator + dynamic-redirect console</p>
+    <div class="topbar-title">
+      <h1>CueArcode</h1>
+      <p class="subtitle">QR code generator + dynamic-redirect console</p>
+    </div>
+    <nav class="topnav" id="topnav">
+      <a href="#" id="nav-redirects" data-view="list">Redirects</a>
+      <a href="#" id="nav-settings" data-view="settings">Settings</a>
+    </nav>
   </header>
 
   <main class="layout">
-    <section class="panel" id="redirects-panel">
-      <h2>Redirects</h2>
+    <!-- ---- List view (landing) ---- -->
+    <section class="view panel" id="view-list">
+      <div class="view-header">
+        <h2>Redirects</h2>
+        <button type="button" id="new-redirect-toggle">+ New redirect</button>
+      </div>
 
-      <form id="create-redirect-form" class="stack">
-        <label>Slug
+      <form id="create-redirect-form" class="stack" hidden>
+        <label><span class="control-label">Slug</span>
           <input type="text" id="new-slug" placeholder="review-etsy" required />
         </label>
-        <label>Target URL
+        <label><span class="control-label">Display name</span>
+          <input type="text" id="new-display-name" placeholder="Etsy reviews (defaults to slug)" maxlength="200" />
+        </label>
+        <label><span class="control-label">Target URL</span>
           <input type="url" id="new-target-url" placeholder="https://example.com/…" required />
         </label>
-        <button type="submit">Create redirect</button>
+        <div class="row-actions">
+          <button type="submit">Create redirect</button>
+          <button type="button" id="new-redirect-cancel" class="secondary-btn">Cancel</button>
+        </div>
       </form>
       <p id="create-redirect-status" class="status"></p>
 
       <ul id="redirect-list" class="redirect-list"></ul>
     </section>
 
-    <section class="panel" id="qr-panel">
+    <!-- ---- Detail view ---- -->
+    <section class="view panel" id="view-detail" hidden>
+      <button type="button" id="detail-back-btn" class="link-btn">&larr; Back to redirects</button>
+
+      <h2 id="detail-display-name">&nbsp;</h2>
+      <p class="detail-meta">You are viewing: <code id="detail-slug"></code></p>
+
+      <form id="detail-form" class="stack">
+        <label><span class="control-label">Display name</span>
+          <input type="text" id="detail-display-name-input" maxlength="200" required />
+        </label>
+        <label><span class="control-label">Target URL</span>
+          <input type="url" id="detail-target-url-input" required />
+        </label>
+        <div class="row-actions">
+          <button type="submit">Save changes</button>
+        </div>
+      </form>
+      <p id="detail-save-status" class="status"></p>
+
+      <div class="detail-links">
+        <p class="detail-link-row"><span class="control-label">Short link</span> <code id="detail-redirect-url"></code></p>
+      </div>
+
+      <div class="row-actions detail-actions">
+        <button type="button" id="detail-generate-qr-btn">Generate QR Code</button>
+        <button type="button" id="detail-delete-btn" class="danger-btn">Delete redirect</button>
+      </div>
+    </section>
+
+    <!-- ---- QR Studio view ---- -->
+    <section class="view panel" id="view-qr-studio" hidden>
+      <button type="button" id="qr-back-btn" class="link-btn">&larr; Back</button>
       <h2>QR Studio</h2>
 
       <div class="stack">
@@ -57,8 +123,10 @@
 
       <div class="studio-grid">
         <div class="controls">
-          <fieldset>
-            <legend>Dots</legend>
+          <p class="hint">Advanced styling — expand a section to adjust it.</p>
+
+          <details class="control-section">
+            <summary>Dots</summary>
             <label>Style
               <select id="dot-style">
                 <option value="square">Square</option>
@@ -79,10 +147,10 @@
             <p class="hint">A true continuous radius slider isn't natively possible with the current QR
               library (discrete shapes only) — this stepped control is the deliberate v1 stand-in.</p>
             <label>Dot color <input type="color" id="dot-color" value="#000000" /></label>
-          </fieldset>
+          </details>
 
-          <fieldset>
-            <legend>Corner eyes</legend>
+          <details class="control-section">
+            <summary>Corner eyes</summary>
             <label>Corner square (frame)
               <select id="corner-square-style">
                 <option value="square">Square</option>
@@ -98,50 +166,51 @@
               </select>
             </label>
             <label>Corner dot color <input type="color" id="corner-dot-color" value="#000000" /></label>
-          </fieldset>
+          </details>
 
-          <fieldset>
-            <legend>Background</legend>
+          <details class="control-section">
+            <summary>Background</summary>
             <label><input type="checkbox" id="bg-enabled" checked /> Background enabled</label>
             <label>Color <input type="color" id="bg-color" value="#ffffff" /></label>
-          </fieldset>
+          </details>
 
-          <fieldset>
-            <legend>Padding &amp; overall shape</legend>
-            <label>Padding / quiet zone (<span id="margin-value">8</span>px)
+          <details class="control-section">
+            <summary>Padding &amp; overall shape</summary>
+            <label><span class="control-label">Padding / quiet zone (<span id="margin-value">8</span>px)</span>
               <input type="range" id="margin" min="0" max="40" value="8" />
             </label>
-            <label>Overall QR corner radius (<span id="overall-radius-value">0</span>px)
+            <label><span class="control-label">Overall QR corner radius (<span id="overall-radius-value">0</span>px)</span>
               <input type="range" id="overall-radius" min="0" max="120" value="0" />
             </label>
-          </fieldset>
+          </details>
 
-          <fieldset>
-            <legend>Image border (independent radius from overall shape above)</legend>
+          <details class="control-section">
+            <summary>Image border</summary>
+            <p class="hint">Independent radius from the overall shape above.</p>
             <label><input type="checkbox" id="border-enabled" /> Border enabled</label>
-            <label>Thickness (<span id="border-thickness-value">4</span>px)
+            <label><span class="control-label">Thickness (<span id="border-thickness-value">4</span>px)</span>
               <input type="range" id="border-thickness" min="1" max="30" value="4" />
             </label>
-            <label>Border radius (<span id="border-radius-value">0</span>px)
+            <label><span class="control-label">Border radius (<span id="border-radius-value">0</span>px)</span>
               <input type="range" id="border-radius" min="0" max="120" value="0" />
             </label>
             <label>Border color <input type="color" id="border-color" value="#000000" /></label>
-          </fieldset>
+          </details>
 
-          <fieldset>
-            <legend>Center icon</legend>
+          <details class="control-section">
+            <summary>Center icon</summary>
             <label>Import (PNG / JPG / SVG)
               <input type="file" id="icon-file" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" />
             </label>
             <button type="button" id="icon-remove">Remove icon</button>
-            <label>Icon size (<span id="icon-size-value">40</span>%)
+            <label><span class="control-label">Icon size (<span id="icon-size-value">40</span>%)</span>
               <input type="range" id="icon-size" min="10" max="60" value="40" />
             </label>
             <p id="icon-status" class="status"></p>
-          </fieldset>
+          </details>
 
-          <fieldset>
-            <legend>Error correction</legend>
+          <details class="control-section">
+            <summary>Error correction</summary>
             <label>Level
               <select id="ecc-level">
                 <option value="L">L — low</option>
@@ -151,7 +220,7 @@
               </select>
             </label>
             <p class="hint">Auto-bumps to H when a center icon is set, unless you pick a level yourself.</p>
-          </fieldset>
+          </details>
         </div>
 
         <div class="preview-col">
@@ -185,6 +254,30 @@
             <ul id="style-history" class="style-history"></ul>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ---- Settings view ---- -->
+    <section class="view panel" id="view-settings" hidden>
+      <h2>Settings</h2>
+
+      <div class="stack settings-block">
+        <h3>Appearance</h3>
+        <label>Theme
+          <select id="theme-select">
+            <option value="system">Match system</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="stack settings-block danger-zone">
+        <h3>Danger zone</h3>
+        <p class="hint">Permanently clears every saved QR style-version snapshot, for every redirect. Redirects
+          themselves are untouched — delete those individually from the Redirects list.</p>
+        <button type="button" id="wipe-history-btn" class="danger-btn">Wipe all QR style history</button>
+        <p id="wipe-history-status" class="status"></p>
       </div>
     </section>
   </main>

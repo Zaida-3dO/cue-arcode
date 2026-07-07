@@ -8,6 +8,7 @@ import { dirname } from 'node:path';
 export interface RedirectRow {
   slug: string;
   target_url: string;
+  display_name: string;
   created_at: string;
   updated_at: string;
 }
@@ -22,10 +23,11 @@ export interface StyleVersionRow {
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS redirects (
-  slug        TEXT PRIMARY KEY,
-  target_url  TEXT NOT NULL,
-  created_at  TEXT NOT NULL,
-  updated_at  TEXT NOT NULL
+  slug          TEXT PRIMARY KEY,
+  target_url    TEXT NOT NULL,
+  display_name  TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS style_history (
@@ -55,17 +57,37 @@ export function openDb(dbPath: string) {
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
 
+  // `CREATE TABLE IF NOT EXISTS` above does not retroactively add columns to
+  // an already-existing `redirects` table (e.g. the deployed NAS container's
+  // production DB, created before `display_name` existed). Additive,
+  // idempotent migration: check for the column via PRAGMA table_info, add it
+  // if missing, then backfill any NULL/empty display_name to the slug. Safe
+  // to run on every startup — a no-op once the column exists and is backfilled.
+  const columns = db.pragma('table_info(redirects)') as Array<{ name: string }>;
+  if (!columns.some((c) => c.name === 'display_name')) {
+    db.exec("ALTER TABLE redirects ADD COLUMN display_name TEXT NOT NULL DEFAULT ''");
+  }
+  db.exec("UPDATE redirects SET display_name = slug WHERE display_name IS NULL OR display_name = ''");
+
   const stmts = {
     listRedirects: db.prepare<[], RedirectRow>('SELECT * FROM redirects ORDER BY slug ASC'),
     getRedirect: db.prepare<[string], RedirectRow>('SELECT * FROM redirects WHERE slug = ?'),
     insertRedirect: db.prepare(
-      'INSERT INTO redirects (slug, target_url, created_at, updated_at) VALUES (@slug, @target_url, @now, @now)',
+      'INSERT INTO redirects (slug, target_url, display_name, created_at, updated_at) ' +
+        'VALUES (@slug, @target_url, @display_name, @now, @now)',
     ),
-    updateRedirect: db.prepare(
+    updateRedirectTargetUrl: db.prepare(
       'UPDATE redirects SET target_url = @target_url, updated_at = @now WHERE slug = @slug',
+    ),
+    updateRedirectDisplayName: db.prepare(
+      'UPDATE redirects SET display_name = @display_name, updated_at = @now WHERE slug = @slug',
+    ),
+    updateRedirectBoth: db.prepare(
+      'UPDATE redirects SET target_url = @target_url, display_name = @display_name, updated_at = @now WHERE slug = @slug',
     ),
     deleteRedirect: db.prepare('DELETE FROM redirects WHERE slug = ?'),
     deleteStyleHistoryForSlug: db.prepare('DELETE FROM style_history WHERE slug = ?'),
+    deleteAllStyleHistory: db.prepare('DELETE FROM style_history'),
 
     listStyleVersions: db.prepare<[string], StyleVersionRow>(
       'SELECT * FROM style_history WHERE slug = ? ORDER BY version DESC',
@@ -89,17 +111,39 @@ export function openDb(dbPath: string) {
     return stmts.getRedirect.get(slug);
   }
 
-  function createRedirect(slug: string, targetUrl: string): RedirectRow {
+  function createRedirect(slug: string, targetUrl: string, displayName?: string): RedirectRow {
     const now = new Date().toISOString();
-    stmts.insertRedirect.run({ slug, target_url: targetUrl, now });
+    const name = displayName && displayName.trim().length > 0 ? displayName.trim() : slug;
+    stmts.insertRedirect.run({ slug, target_url: targetUrl, display_name: name, now });
     const row = getRedirect(slug);
     if (!row) throw new Error(`Failed to read back redirect '${slug}' after insert`);
     return row;
   }
 
-  function updateRedirect(slug: string, targetUrl: string): RedirectRow | undefined {
+  // At least one of targetUrl/displayName must be provided (enforced by the
+  // route layer) — this function updates only the field(s) given.
+  function updateRedirect(
+    slug: string,
+    updates: { targetUrl?: string | undefined; displayName?: string | undefined },
+  ): RedirectRow | undefined {
     const now = new Date().toISOString();
-    const result = stmts.updateRedirect.run({ slug, target_url: targetUrl, now });
+    const hasTarget = updates.targetUrl !== undefined;
+    const hasDisplayName = updates.displayName !== undefined;
+    let result;
+    if (hasTarget && hasDisplayName) {
+      result = stmts.updateRedirectBoth.run({
+        slug,
+        target_url: updates.targetUrl,
+        display_name: updates.displayName,
+        now,
+      });
+    } else if (hasTarget) {
+      result = stmts.updateRedirectTargetUrl.run({ slug, target_url: updates.targetUrl, now });
+    } else if (hasDisplayName) {
+      result = stmts.updateRedirectDisplayName.run({ slug, display_name: updates.displayName, now });
+    } else {
+      return getRedirect(slug);
+    }
     if (result.changes === 0) return undefined;
     return getRedirect(slug);
   }
@@ -116,6 +160,11 @@ export function openDb(dbPath: string) {
 
   function getStyleVersion(slug: string, version: number): StyleVersionRow | undefined {
     return stmts.getStyleVersion.get(slug, version);
+  }
+
+  function deleteAllStyleHistory(): number {
+    const result = stmts.deleteAllStyleHistory.run();
+    return result.changes;
   }
 
   function saveStyleVersion(slug: string, styleJson: string): StyleVersionRow {
@@ -138,6 +187,7 @@ export function openDb(dbPath: string) {
     listStyleVersions,
     getStyleVersion,
     saveStyleVersion,
+    deleteAllStyleHistory,
     close: () => db.close(),
   };
 }

@@ -57,11 +57,13 @@ describe('redirects API (integration, real HTTP + in-memory SQLite)', () => {
     });
     expect(createRes.status).toBe(201);
     const created = (await createRes.json()) as {
-      redirect: { slug: string; redirect_url: string };
+      redirect: { slug: string; redirect_url: string; display_name: string };
       cloudflare: { ok: boolean; error?: string };
     };
     expect(created.redirect.slug).toBe('review-etsy');
     expect(created.redirect.redirect_url).toBe('https://go.jodacreativestudio.com/r/review-etsy');
+    // display_name omitted on create -> defaults to the slug.
+    expect(created.redirect.display_name).toBe('review-etsy');
     // No CF creds in this test environment — the app must degrade gracefully, not crash.
     expect(created.cloudflare.ok).toBe(false);
 
@@ -92,6 +94,96 @@ describe('redirects API (integration, real HTTP + in-memory SQLite)', () => {
 
     const afterDeleteRes = await fetch(`${baseUrl}/api/redirects/review-etsy`);
     expect(afterDeleteRes.status).toBe(404);
+  });
+
+  it('accepts an explicit display_name on create and updates it independently via PUT', async () => {
+    const createRes = await fetch(`${baseUrl}/api/redirects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slug: 'display-name-test',
+        target_url: 'https://example.com/a',
+        display_name: 'My Nice Label',
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as { redirect: { display_name: string; target_url: string } };
+    expect(created.redirect.display_name).toBe('My Nice Label');
+
+    // Update display_name only — target_url must be untouched.
+    const updateRes = await fetch(`${baseUrl}/api/redirects/display-name-test`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display_name: 'Renamed Label' }),
+    });
+    expect(updateRes.status).toBe(200);
+    const updated = (await updateRes.json()) as { redirect: { display_name: string; target_url: string } };
+    expect(updated.redirect.display_name).toBe('Renamed Label');
+    expect(updated.redirect.target_url).toBe('https://example.com/a');
+  });
+
+  it('rejects a display_name containing HTML metacharacters (stored-XSS guard)', async () => {
+    const res = await fetch(`${baseUrl}/api/redirects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slug: 'display-name-xss',
+        target_url: 'https://example.com',
+        display_name: '"><script>alert(1)</script>',
+      }),
+    });
+    expect(res.status).toBe(400);
+    const getRes = await fetch(`${baseUrl}/api/redirects/display-name-xss`);
+    expect(getRes.status).toBe(404);
+  });
+
+  it('rejects a display_name over the length cap', async () => {
+    const res = await fetch(`${baseUrl}/api/redirects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slug: 'display-name-too-long',
+        target_url: 'https://example.com',
+        display_name: 'x'.repeat(201),
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects an attempt to change slug via PUT (slug is immutable)', async () => {
+    await fetch(`${baseUrl}/api/redirects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'immutable-slug', target_url: 'https://example.com/a' }),
+    });
+
+    const res = await fetch(`${baseUrl}/api/redirects/immutable-slug`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'a-different-slug', target_url: 'https://example.com/b' }),
+    });
+    expect(res.status).toBe(400);
+
+    // Original row untouched, and no new row was created under the smuggled slug.
+    const original = await fetch(`${baseUrl}/api/redirects/immutable-slug`);
+    expect(original.status).toBe(200);
+    const smuggled = await fetch(`${baseUrl}/api/redirects/a-different-slug`);
+    expect(smuggled.status).toBe(404);
+  });
+
+  it('rejects a PUT with neither target_url nor display_name', async () => {
+    await fetch(`${baseUrl}/api/redirects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'empty-put-test', target_url: 'https://example.com' }),
+    });
+
+    const res = await fetch(`${baseUrl}/api/redirects/empty-put-test`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
   });
 
   it('saves and lists versioned style history for a slug', async () => {
@@ -157,5 +249,63 @@ describe('redirects API (integration, real HTTP + in-memory SQLite)', () => {
     const saved = (await res.json()) as { version: number; style: { image: string } };
     expect(saved.version).toBe(1);
     expect(saved.style.image.length).toBe(bigDataUri.length);
+  });
+
+  it('DELETE /api/styles wipes style history for every slug, leaving redirects intact', async () => {
+    await fetch(`${baseUrl}/api/redirects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'wipe-a', target_url: 'https://example.com/a' }),
+    });
+    await fetch(`${baseUrl}/api/redirects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'wipe-b', target_url: 'https://example.com/b' }),
+    });
+    await fetch(`${baseUrl}/api/styles/wipe-a`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style: { v: 1 } }),
+    });
+    await fetch(`${baseUrl}/api/styles/wipe-a`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style: { v: 2 } }),
+    });
+    await fetch(`${baseUrl}/api/styles/wipe-b`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ style: { v: 1 } }),
+    });
+
+    const wipeRes = await fetch(`${baseUrl}/api/styles`, { method: 'DELETE' });
+    expect(wipeRes.status).toBe(200);
+    const wiped = (await wipeRes.json()) as { ok: boolean; deleted: number };
+    expect(wiped.ok).toBe(true);
+    // This suite shares one DB/server across all tests (see beforeAll), so by
+    // this point other earlier tests have also saved style versions for their
+    // own slugs (e.g. 'style-test', 'big-style') — a global wipe clears
+    // those too, so `deleted` legitimately reflects the whole DB, not just
+    // the 3 rows this test added. >= 3 is the guarantee this test owns.
+    expect(wiped.deleted).toBeGreaterThanOrEqual(3);
+
+    const afterA = await fetch(`${baseUrl}/api/styles/wipe-a`);
+    const afterAJson = (await afterA.json()) as { versions: unknown[] };
+    expect(afterAJson.versions).toEqual([]);
+    const afterB = await fetch(`${baseUrl}/api/styles/wipe-b`);
+    const afterBJson = (await afterB.json()) as { versions: unknown[] };
+    expect(afterBJson.versions).toEqual([]);
+
+    // Proves the wipe is global, not scoped to wipe-a/wipe-b: a slug from an
+    // earlier, unrelated test in this suite is also cleared out.
+    const afterStyleTest = await fetch(`${baseUrl}/api/styles/style-test`);
+    const afterStyleTestJson = (await afterStyleTest.json()) as { versions: unknown[] };
+    expect(afterStyleTestJson.versions).toEqual([]);
+
+    // Redirects themselves are untouched by a history wipe.
+    const stillThereA = await fetch(`${baseUrl}/api/redirects/wipe-a`);
+    expect(stillThereA.status).toBe(200);
+    const stillThereB = await fetch(`${baseUrl}/api/redirects/wipe-b`);
+    expect(stillThereB.status).toBe(200);
   });
 });

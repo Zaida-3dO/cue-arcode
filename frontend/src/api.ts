@@ -2,6 +2,7 @@
 export interface RedirectDto {
   slug: string;
   target_url: string;
+  display_name: string;
   redirect_url: string;
   created_at: string;
   updated_at: string;
@@ -29,23 +30,27 @@ export async function listRedirects(): Promise<RedirectDto[]> {
 export async function createRedirect(
   slug: string,
   targetUrl: string,
+  displayName?: string,
 ): Promise<{ redirect: RedirectDto; cloudflare: CloudflareResult }> {
   const res = await fetch('/api/redirects', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slug, target_url: targetUrl }),
+    body: JSON.stringify({ slug, target_url: targetUrl, display_name: displayName }),
   });
   return asJson(res);
 }
 
 export async function updateRedirect(
   slug: string,
-  targetUrl: string,
+  updates: { targetUrl?: string; displayName?: string },
 ): Promise<{ redirect: RedirectDto; cloudflare: CloudflareResult }> {
+  const body: { target_url?: string; display_name?: string } = {};
+  if (updates.targetUrl !== undefined) body.target_url = updates.targetUrl;
+  if (updates.displayName !== undefined) body.display_name = updates.displayName;
   const res = await fetch(`/api/redirects/${encodeURIComponent(slug)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target_url: targetUrl }),
+    body: JSON.stringify(body),
   });
   return asJson(res);
 }
@@ -73,5 +78,10 @@ export async function saveStyleVersion(slug: string, style: unknown): Promise<St
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ style }),
   });
+  return asJson(res);
+}
+
+export async function deleteAllStyleHistory(): Promise<{ ok: boolean; deleted: number }> {
+  const res = await fetch('/api/styles', { method: 'DELETE' });
   return asJson(res);
 }
