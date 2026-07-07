@@ -4,7 +4,11 @@
   --bg: #ffffff;
   --fg: #16161a;
   --panel-bg: #fafafa;
-  --accent: #3b5bfd;
+  --primary: #3b5bfd;
+  --primary-fg: #ffffff;
+  --accent: #0f9d8f;
+  --danger: #d6455a;
+  --danger-fg: #ffffff;
   --warn: #b3540c;
 }
 
@@ -14,12 +18,60 @@
     --bg: #121214;
     --fg: #eaeaee;
     --panel-bg: #1a1a1d;
+    --primary: #7c92ff;
+    --accent: #2dd4c4;
+    --danger: #ff7a86;
     --warn: #f3b165;
   }
 }
 
+/* Explicit theme override (Settings → Appearance). A `[data-theme]`
+   attribute selector on :root has higher specificity than the bare `:root`
+   used inside the prefers-color-scheme media query above, so whichever of
+   these two blocks applies always wins over the media query, in both
+   directions — light override on a dark OS, and vice versa. Absence of the
+   attribute (the default) leaves the media query as sole authority. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --border: #d9d9df;
+  --bg: #ffffff;
+  --fg: #16161a;
+  --panel-bg: #fafafa;
+  --primary: #3b5bfd;
+  --primary-fg: #ffffff;
+  --accent: #0f9d8f;
+  --danger: #d6455a;
+  --danger-fg: #ffffff;
+  --warn: #b3540c;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --border: #33333a;
+  --bg: #121214;
+  --fg: #eaeaee;
+  --panel-bg: #1a1a1d;
+  --primary: #7c92ff;
+  --primary-fg: #0b0b0d;
+  --accent: #2dd4c4;
+  --danger: #ff7a86;
+  --danger-fg: #2a0a0d;
+  --warn: #f3b165;
+}
+
 * {
   box-sizing: border-box;
+}
+
+/* Author stylesheets always beat the UA stylesheet's `[hidden] { display:
+   none }` rule, regardless of matching specificity — so any authored
+   `display` declaration on a hidden element (e.g. `.stack { display: flex }`
+   on the create-redirect form, or a future rule on `.view`) would otherwise
+   silently defeat `element.hidden = true`. This makes `hidden` win
+   unconditionally, which is what the view-switching and form-toggle logic
+   in ui.ts depends on. */
+[hidden] {
+  display: none !important;
 }
 
 body {
@@ -30,11 +82,18 @@ body {
 }
 
 .topbar {
-  padding: 1.25rem 1.5rem 0.5rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .topbar h1 {
   margin: 0;
+  color: var(--accent);
 }
 
 .subtitle {
@@ -42,18 +101,40 @@ body {
   opacity: 0.7;
 }
 
-.layout {
-  display: grid;
-  grid-template-columns: minmax(280px, 380px) 1fr;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  align-items: start;
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding-top: 0.35rem;
 }
 
-@media (max-width: 900px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
+.topnav a {
+  color: var(--fg);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  opacity: 0.65;
+  padding-bottom: 0.2rem;
+  border-bottom: 2px solid transparent;
+}
+
+.topnav a:hover {
+  opacity: 1;
+}
+
+.topnav a.active {
+  color: var(--primary);
+  opacity: 1;
+  border-bottom-color: var(--primary);
+}
+
+.layout {
+  padding: 1.5rem;
+}
+
+.view {
+  max-width: 960px;
+  margin: 0 auto;
 }
 
 .panel {
@@ -61,6 +142,23 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1rem 1.25rem 1.5rem;
+}
+
+.view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.view-header h2 {
+  margin: 0;
+}
+
+h2,
+h3 {
+  color: var(--accent);
 }
 
 .stack {
@@ -75,6 +173,18 @@ label {
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.9rem;
+}
+
+/* Wraps a label's text + interpolated value + unit (e.g. "Thickness (4px)")
+   as a single flex item. Needed because `label` above is flex-column: with
+   the old markup (bare text + <span> + bare text as separate label
+   children), each anonymous text node became its own flex item and stacked
+   on its own line — "Thickness (" / "4" / "px)" / [slider] instead of one
+   line. Wrapping them in one element makes them one flex item that lays out
+   inline internally, so the input is once again the label's only sibling
+   flex item. */
+.control-label {
+  display: inline;
 }
 
 input,
@@ -95,14 +205,42 @@ input[type="checkbox"] {
 
 button {
   cursor: pointer;
-  background: var(--accent);
-  color: white;
+  background: var(--primary);
+  color: var(--primary-fg);
   border: none;
   padding: 0.5rem 0.9rem;
 }
 
 button:hover {
   filter: brightness(1.08);
+}
+
+button.secondary-btn {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+button.danger-btn {
+  background: var(--danger);
+  color: var(--danger-fg);
+}
+
+button.link-btn {
+  background: none;
+  color: var(--primary);
+  border: none;
+  padding: 0.2rem 0;
+  font-weight: 600;
+}
+
+button.link-btn:hover {
+  filter: none;
+  text-decoration: underline;
+}
+
+a {
+  color: var(--primary);
 }
 
 fieldset {
@@ -119,6 +257,51 @@ legend {
   padding: 0 0.4rem;
   font-weight: 600;
   font-size: 0.85rem;
+}
+
+/* QR Studio's advanced-settings sections: native <details>/<summary> so they
+   read as "advanced, collapsed by default" — expanded only on demand. */
+details.control-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 0 0 0.9rem;
+  padding: 0.5rem 0.75rem;
+}
+
+details.control-section[open] {
+  padding-bottom: 0.75rem;
+}
+
+details.control-section > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.25rem 0;
+  list-style: none;
+  color: var(--accent);
+}
+
+details.control-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.control-section > summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 0.4rem;
+  transition: transform 0.15s ease;
+}
+
+details.control-section[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+details.control-section > summary:hover {
+  text-decoration: underline;
+}
+
+details.control-section > *:not(summary) {
+  margin-top: 0.6rem;
 }
 
 .hint {
@@ -196,10 +379,9 @@ legend {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
-.redirect-list li,
 .style-history li {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -210,13 +392,118 @@ legend {
   font-size: 0.85rem;
 }
 
-.redirect-list .row-actions,
+/* ---- Redirect cards (list view) ---- */
+
+.redirect-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.redirect-card .card-body {
+  padding: 0.75rem 0.9rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.redirect-card .card-body:hover {
+  background: var(--panel-bg);
+}
+
+.redirect-card .card-body:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.card-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.card-label {
+  flex: 0 0 auto;
+  min-width: 5.5rem;
+  opacity: 0.6;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.card-value {
+  word-break: break-word;
+}
+
+.card-value-wrap {
+  word-break: break-all;
+}
+
+.redirect-card .row-actions {
+  padding: 0 0.9rem 0.75rem;
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
 .style-history .row-actions {
   display: flex;
   gap: 0.4rem;
   flex-wrap: wrap;
 }
 
-.redirect-list code {
+/* ---- Detail view ---- */
+
+.detail-meta {
+  opacity: 0.7;
+  font-size: 0.9rem;
+}
+
+.detail-meta code {
   word-break: break-all;
+}
+
+.detail-links code {
+  word-break: break-all;
+}
+
+.detail-link-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.detail-actions {
+  margin-top: 1rem;
+}
+
+/* ---- Settings view ---- */
+
+.settings-block {
+  padding: 0.9rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.settings-block:first-of-type {
+  border-top: none;
+}
+
+.settings-block h3 {
+  margin-top: 0;
+}
+
+.danger-zone {
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
 }
