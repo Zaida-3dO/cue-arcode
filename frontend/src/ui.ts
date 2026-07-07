@@ -17,6 +17,7 @@ import {
 } from './api.js';
 import { REDIRECT_BASE_URL } from './constants.js';
 import { defaultOptions, type AppQrOptions, type DotRadiusStep, type DotType } from './qr/types.js';
+import { resolveOptionsForTarget } from './qr/styleForSlug.js';
 import { contrastRatio, isLowContrast } from './qr/contrast.js';
 import { shouldWarnLogoCoverage } from './qr/coverage.js';
 import { resolveErrorCorrectionLevel } from './qr/eccPolicy.js';
@@ -76,8 +77,13 @@ type View = 'list' | 'detail' | 'qr-studio' | 'settings';
 type ThemeChoice = 'system' | 'light' | 'dark';
 const THEME_STORAGE_KEY = 'cuearcode-theme';
 
+// Placeholder `data` used for the "(ad-hoc — not tied to a slug)" mode —
+// both on initial boot and whenever the active-slug dropdown is switched
+// back to ad-hoc.
+const ADHOC_PLACEHOLDER_DATA = `${REDIRECT_BASE_URL}/example`;
+
 export function initUi(): void {
-  let options: AppQrOptions = defaultOptions(`${REDIRECT_BASE_URL}/example`);
+  let options: AppQrOptions = defaultOptions(ADHOC_PLACEHOLDER_DATA);
   let redirects: RedirectDto[] = [];
   let selectedSlug: string | null = null;
   let qr: QRCodeStyling | undefined;
@@ -521,11 +527,26 @@ export function initUi(): void {
 
   async function selectSlug(slug: string): Promise<void> {
     selectedSlug = slug;
-    const row = redirects.find((r) => r.slug === slug);
-    if (row) {
-      options.data = row.redirect_url;
-    }
     els.activeSlug.value = slug;
+
+    const row = redirects.find((r) => r.slug === slug);
+    const targetData = row ? row.redirect_url : options.data;
+    // Always rebuild from a clean base for the new target — never carry
+    // forward whatever the previously-active slug (or ad-hoc session) left
+    // in `options`. If the slug has saved style history, its latest version
+    // is merged on top of that clean base; otherwise it's plain defaults.
+    const versions = await listStyleVersions(slug);
+    options = resolveOptionsForTarget(targetData, versions);
+    syncControlsFromOptions();
+    scheduleRender();
+    renderHistory(versions);
+  }
+
+  /** Switches QR Studio to ad-hoc mode (no slug), resetting `options` to a clean base. */
+  async function selectAdHoc(): Promise<void> {
+    selectedSlug = null;
+    els.activeSlug.value = '';
+    options = resolveOptionsForTarget(ADHOC_PLACEHOLDER_DATA, []);
     syncControlsFromOptions();
     scheduleRender();
     await refreshHistory();
@@ -584,7 +605,11 @@ export function initUi(): void {
   });
 
   els.activeSlug.addEventListener('change', () => {
-    if (els.activeSlug.value) void selectSlug(els.activeSlug.value);
+    if (els.activeSlug.value) {
+      void selectSlug(els.activeSlug.value);
+    } else {
+      void selectAdHoc();
+    }
   });
 
   // ---- QR Studio back navigation ----
