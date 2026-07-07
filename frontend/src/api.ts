@@ -80,8 +80,3 @@ export async function saveStyleVersion(slug: string, style: unknown): Promise<St
   });
   return asJson(res);
 }
-
-export async function deleteAllStyleHistory(): Promise<{ ok: boolean; deleted: number }> {
-  const res = await fetch('/api/styles', { method: 'DELETE' });
-  return asJson(res);
-}

@@ -87,7 +87,6 @@ export function openDb(dbPath: string) {
     ),
     deleteRedirect: db.prepare('DELETE FROM redirects WHERE slug = ?'),
     deleteStyleHistoryForSlug: db.prepare('DELETE FROM style_history WHERE slug = ?'),
-    deleteAllStyleHistory: db.prepare('DELETE FROM style_history'),
 
     listStyleVersions: db.prepare<[string], StyleVersionRow>(
       'SELECT * FROM style_history WHERE slug = ? ORDER BY version DESC',
@@ -162,11 +161,6 @@ export function openDb(dbPath: string) {
     return stmts.getStyleVersion.get(slug, version);
   }
 
-  function deleteAllStyleHistory(): number {
-    const result = stmts.deleteAllStyleHistory.run();
-    return result.changes;
-  }
-
   function saveStyleVersion(slug: string, styleJson: string): StyleVersionRow {
     const row = stmts.getLatestVersionNumber.get(slug);
     const nextVersion = (row?.maxVersion ?? 0) + 1;
@@ -187,7 +181,6 @@ export function openDb(dbPath: string) {
     listStyleVersions,
     getStyleVersion,
     saveStyleVersion,
-    deleteAllStyleHistory,
     close: () => db.close(),
   };
 }

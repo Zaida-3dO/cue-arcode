@@ -404,6 +404,81 @@ details.control-section > *:not(summary) {
   font-size: 0.85rem;
 }
 
+/* ---- Create-redirect form (list view) ---- */
+
+.create-form-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.create-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.create-field-name {
+  flex: 1.4 1 260px;
+}
+
+.create-field-id {
+  flex: 1 1 220px;
+}
+
+.control-label-prominent {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.input-prominent {
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding: 0.55rem 0.6rem;
+}
+
+/* The ID field: a base-URL prefix + freetext ID that read as ONE control
+   (like a phone number's country-code picker) — a bordered container with
+   the <select> and <input> as two panes and no visible seam between them.
+   The <select> looks like static prefix text but is a real control
+   underneath, ready for more base-domain options later (single option for
+   now — see frontend/src/ui.ts). */
+.id-compound {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.id-compound select {
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid var(--border);
+  background: var(--panel-bg);
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--fg);
+  opacity: 0.85;
+  cursor: pointer;
+}
+
+.id-compound input {
+  border: none;
+  border-radius: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.id-compound select:focus-visible,
+.id-compound input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
 /* ---- Redirect cards (list view) ---- */
 
 .redirect-card {
@@ -528,10 +603,4 @@ details.control-section > *:not(summary) {
 
 .settings-block h3 {
   margin-top: 0;
-}
-
-.danger-zone {
-  border: 1px solid var(--danger);
-  border-radius: 8px;
-  padding: 0.9rem 1rem;
 }

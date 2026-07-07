@@ -98,23 +98,6 @@ describe('db (redirects + style history)', () => {
     expect(db.listStyleVersions('b')).toHaveLength(1);
   });
 
-  it('wipes all style history across every slug via deleteAllStyleHistory, leaving redirects untouched', () => {
-    db.createRedirect('a', 'https://example.com/a');
-    db.createRedirect('b', 'https://example.com/b');
-    db.saveStyleVersion('a', JSON.stringify({ v: 1 }));
-    db.saveStyleVersion('a', JSON.stringify({ v: 2 }));
-    db.saveStyleVersion('b', JSON.stringify({ v: 1 }));
-
-    const deletedCount = db.deleteAllStyleHistory();
-    expect(deletedCount).toBe(3);
-
-    expect(db.listStyleVersions('a')).toEqual([]);
-    expect(db.listStyleVersions('b')).toEqual([]);
-    // Redirects themselves are untouched by a history wipe.
-    expect(db.listRedirects()).toHaveLength(2);
-
-    expect(db.deleteAllStyleHistory()).toBe(0); // already empty, idempotent
-  });
 });
 
 describe('db migration (display_name backfill on pre-existing databases)', () => {

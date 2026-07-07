@@ -11,7 +11,6 @@ import {
   deleteRedirect,
   listStyleVersions,
   saveStyleVersion,
-  deleteAllStyleHistory,
   type RedirectDto,
   type StyleVersionDto,
 } from './api.js';
@@ -110,6 +109,7 @@ export function initUi(): void {
     newRedirectToggle: byId<HTMLButtonElement>('new-redirect-toggle'),
     newRedirectCancel: byId<HTMLButtonElement>('new-redirect-cancel'),
     createForm: byId<HTMLFormElement>('create-redirect-form'),
+    newSlugDomain: byId<HTMLSelectElement>('new-slug-domain'),
     newSlug: byId<HTMLInputElement>('new-slug'),
     newDisplayName: byId<HTMLInputElement>('new-display-name'),
     newTargetUrl: byId<HTMLInputElement>('new-target-url'),
@@ -183,8 +183,6 @@ export function initUi(): void {
 
     // Settings view
     themeSelect: byId<HTMLSelectElement>('theme-select'),
-    wipeHistoryBtn: byId<HTMLButtonElement>('wipe-history-btn'),
-    wipeHistoryStatus: byId<HTMLParagraphElement>('wipe-history-status'),
   };
 
   // ---- View navigation ----
@@ -598,9 +596,49 @@ export function initUi(): void {
 
   // ---- Create redirect (list view) ----
 
+  // The ID field's base-URL prefix reads as static text (like a phone
+  // number's "+44" country-code segment) but is a real <select> underneath —
+  // deliberately scoped to a single option for now (only one Cloudflare zone
+  // is wired up); more base domains can be added here later without any
+  // markup changes. Populated from the shared REDIRECT_BASE_URL constant
+  // (scheme stripped for display) rather than hardcoded in HTML, so the two
+  // never drift.
+  function initSlugDomainOptions(): void {
+    els.newSlugDomain.innerHTML = '';
+    const opt = document.createElement('option');
+    const displayPrefix = `${REDIRECT_BASE_URL.replace(/^https?:\/\//, '')}/`;
+    opt.value = displayPrefix;
+    opt.textContent = displayPrefix;
+    els.newSlugDomain.appendChild(opt);
+  }
+
+  // Slug/ID characters are filtered live as the user types — not just on
+  // submit — mirroring the server's authoritative pattern
+  // (SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/ in
+  // src/routes/redirects.ts): strip anything outside [a-z0-9-] and force
+  // lowercase, since that pattern is lowercase-only. This is a UX nicety
+  // only — the server remains the authoritative validator (it also checks
+  // the start/end-character and length rules this simpler live filter
+  // doesn't bother enforcing character-by-character).
+  const SLUG_UNSAFE_CHARS = /[^a-z0-9-]/g;
+
+  els.newSlug.addEventListener('input', () => {
+    const cursorPos = els.newSlug.selectionStart;
+    const before = els.newSlug.value;
+    const filtered = before.toLowerCase().replace(SLUG_UNSAFE_CHARS, '');
+    if (filtered !== before) {
+      els.newSlug.value = filtered;
+      // We only ever remove characters here, never insert, so clamping the
+      // original numeric offset to the new (shorter-or-equal) length keeps
+      // the cursor in a sane spot without needing a full diff.
+      const pos = Math.min(cursorPos ?? filtered.length, filtered.length);
+      els.newSlug.setSelectionRange(pos, pos);
+    }
+  });
+
   els.newRedirectToggle.addEventListener('click', () => {
     els.createForm.hidden = !els.createForm.hidden;
-    if (!els.createForm.hidden) els.newSlug.focus();
+    if (!els.createForm.hidden) els.newDisplayName.focus();
   });
 
   els.newRedirectCancel.addEventListener('click', () => {
@@ -850,27 +888,10 @@ export function initUi(): void {
     })();
   });
 
-  // ---- Settings: wipe style history ----
-
-  els.wipeHistoryBtn.addEventListener('click', () => {
-    const confirmed = window.confirm(
-      'This permanently deletes ALL saved QR style history for every redirect. This cannot be undone.',
-    );
-    if (!confirmed) return;
-    void (async () => {
-      try {
-        const { deleted } = await deleteAllStyleHistory();
-        els.wipeHistoryStatus.textContent = `Wiped ${deleted} saved style version${deleted === 1 ? '' : 's'}.`;
-        if (selectedSlug) await refreshHistory();
-      } catch (err) {
-        els.wipeHistoryStatus.textContent = `Failed to wipe history: ${(err as Error).message}`;
-      }
-    })();
-  });
-
   // ---- Boot ----
 
   initTheme();
+  initSlugDomainOptions();
   syncControlsFromOptions();
   scheduleRender();
   showView(currentView);
