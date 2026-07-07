@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CueArcode</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="theme-color" content="#d34c50" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>CueArcode</h1>
+    <p class="subtitle">QR code generator + dynamic-redirect console</p>
+  </header>
+
+  <main class="layout">
+    <section class="panel" id="redirects-panel">
+      <h2>Redirects</h2>
+
+      <form id="create-redirect-form" class="stack">
+        <label>Slug
+          <input type="text" id="new-slug" placeholder="review-etsy" required />
+        </label>
+        <label>Target URL
+          <input type="url" id="new-target-url" placeholder="https://example.com/…" required />
+        </label>
+        <button type="submit">Create redirect</button>
+      </form>
+      <p id="create-redirect-status" class="status"></p>
+
+      <ul id="redirect-list" class="redirect-list"></ul>
+    </section>
+
+    <section class="panel" id="qr-panel">
+      <h2>QR Studio</h2>
+
+      <div class="stack">
+        <label>Slug in use
+          <select id="active-slug"></select>
+        </label>
+        <label>QR data (URL encoded)
+          <input type="text" id="qr-data" readonly />
+        </label>
+      </div>
+
+      <div class="preset-row">
+        <span>Presets:</span>
+        <button type="button" class="preset-btn" data-preset="classic">Classic</button>
+        <button type="button" class="preset-btn" data-preset="rounded">Rounded</button>
+        <button type="button" class="preset-btn" data-preset="bold">Bold</button>
+      </div>
+
+      <div class="studio-grid">
+        <div class="controls">
+          <fieldset>
+            <legend>Dots</legend>
+            <label>Style
+              <select id="dot-style">
+                <option value="square">Square</option>
+                <option value="rounded">Rounded</option>
+                <option value="dots">Bubble (dots)</option>
+                <option value="classy">Classy</option>
+                <option value="classy-rounded">Classy rounded</option>
+                <option value="extra-rounded">Extra rounded</option>
+              </select>
+            </label>
+            <label>Radius (v1 stepped — see note)
+              <select id="dot-radius-step">
+                <option value="square">Square (0)</option>
+                <option value="rounded">Rounded (mid)</option>
+                <option value="extra-rounded">Extra rounded (max)</option>
+              </select>
+            </label>
+            <p class="hint">A true continuous radius slider isn't natively possible with the current QR
+              library (discrete shapes only) — this stepped control is the deliberate v1 stand-in.</p>
+            <label>Dot color <input type="color" id="dot-color" value="#000000" /></label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Corner eyes</legend>
+            <label>Corner square (frame)
+              <select id="corner-square-style">
+                <option value="square">Square</option>
+                <option value="dot">Circle</option>
+                <option value="extra-rounded">Extra rounded</option>
+              </select>
+            </label>
+            <label>Corner square color <input type="color" id="corner-square-color" value="#000000" /></label>
+            <label>Corner dot (pupil)
+              <select id="corner-dot-style">
+                <option value="square">Square</option>
+                <option value="dot">Circle</option>
+              </select>
+            </label>
+            <label>Corner dot color <input type="color" id="corner-dot-color" value="#000000" /></label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Background</legend>
+            <label><input type="checkbox" id="bg-enabled" checked /> Background enabled</label>
+            <label>Color <input type="color" id="bg-color" value="#ffffff" /></label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Padding &amp; overall shape</legend>
+            <label>Padding / quiet zone (<span id="margin-value">8</span>px)
+              <input type="range" id="margin" min="0" max="40" value="8" />
+            </label>
+            <label>Overall QR corner radius (<span id="overall-radius-value">0</span>px)
+              <input type="range" id="overall-radius" min="0" max="120" value="0" />
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Image border (independent radius from overall shape above)</legend>
+            <label><input type="checkbox" id="border-enabled" /> Border enabled</label>
+            <label>Thickness (<span id="border-thickness-value">4</span>px)
+              <input type="range" id="border-thickness" min="1" max="30" value="4" />
+            </label>
+            <label>Border radius (<span id="border-radius-value">0</span>px)
+              <input type="range" id="border-radius" min="0" max="120" value="0" />
+            </label>
+            <label>Border color <input type="color" id="border-color" value="#000000" /></label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Center icon</legend>
+            <label>Import (PNG / JPG / SVG)
+              <input type="file" id="icon-file" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" />
+            </label>
+            <button type="button" id="icon-remove">Remove icon</button>
+            <label>Icon size (<span id="icon-size-value">40</span>%)
+              <input type="range" id="icon-size" min="10" max="60" value="40" />
+            </label>
+            <p id="icon-status" class="status"></p>
+          </fieldset>
+
+          <fieldset>
+            <legend>Error correction</legend>
+            <label>Level
+              <select id="ecc-level">
+                <option value="L">L — low</option>
+                <option value="M">M — medium</option>
+                <option value="Q">Q — quartile</option>
+                <option value="H">H — high</option>
+              </select>
+            </label>
+            <p class="hint">Auto-bumps to H when a center icon is set, unless you pick a level yourself.</p>
+          </fieldset>
+        </div>
+
+        <div class="preview-col">
+          <canvas id="qr-preview" width="320" height="320" class="qr-preview"></canvas>
+
+          <div id="warnings" class="warnings"></div>
+
+          <div class="stack">
+            <button type="button" id="test-scan-btn">Test Scan</button>
+            <p id="test-scan-result" class="status"></p>
+          </div>
+
+          <div class="stack">
+            <label>Export format
+              <select id="export-format">
+                <option value="png">PNG</option>
+                <option value="jpeg">JPG</option>
+              </select>
+            </label>
+            <button type="button" id="export-btn">Export</button>
+            <p id="export-status" class="status"></p>
+          </div>
+
+          <div class="stack">
+            <button type="button" id="save-style-btn">Save style (new version)</button>
+            <p id="save-style-status" class="status"></p>
+          </div>
+
+          <div>
+            <h3>History</h3>
+            <ul id="style-history" class="style-history"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/bundle.js"></script>
+</body>
+</html>
