@@ -43,4 +43,37 @@ describe('resolveOptionsForTarget', () => {
     const result = resolveOptionsForTarget('https://example.com/r/bar', versions);
     expect(result.margin).toBe(42);
   });
+
+  it('uses the preferred version when one is specified and present, not the latest', () => {
+    const versions: StyleVersionDto[] = [
+      { version: 1, style: { margin: 1 }, created_at: '2026-01-01T00:00:00Z' },
+      { version: 2, style: { margin: 2 }, created_at: '2026-01-02T00:00:00Z' },
+      { version: 3, style: { margin: 3 }, created_at: '2026-01-03T00:00:00Z' },
+    ];
+
+    const result = resolveOptionsForTarget('https://example.com/r/foo', versions, 2);
+    expect(result.margin).toBe(2);
+    // data is still always forced to targetData.
+    expect(result.data).toBe('https://example.com/r/foo');
+  });
+
+  it('falls back to the latest version when preferredVersion has no match', () => {
+    const versions: StyleVersionDto[] = [
+      { version: 1, style: { margin: 1 }, created_at: '2026-01-01T00:00:00Z' },
+      { version: 2, style: { margin: 2 }, created_at: '2026-01-02T00:00:00Z' },
+    ];
+
+    const result = resolveOptionsForTarget('https://example.com/r/foo', versions, 99);
+    expect(result.margin).toBe(2);
+  });
+
+  it('behaves like the latest-version case when preferredVersion is omitted', () => {
+    const versions: StyleVersionDto[] = [
+      { version: 1, style: { margin: 1 }, created_at: '2026-01-01T00:00:00Z' },
+      { version: 2, style: { margin: 2 }, created_at: '2026-01-02T00:00:00Z' },
+    ];
+
+    const result = resolveOptionsForTarget('https://example.com/r/foo', versions);
+    expect(result.margin).toBe(2);
+  });
 });

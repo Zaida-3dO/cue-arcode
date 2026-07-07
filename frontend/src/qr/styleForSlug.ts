@@ -13,17 +13,23 @@ import type { StyleVersionDto } from '../api.js';
  *
  * Always starts from a fresh `defaultOptions(targetData)` base — never from
  * whatever `options` happened to be set to previously — then, if a saved
- * style exists, merges the latest version's style on top of that clean base
+ * style exists, merges a version's style on top of that clean base
  * (mirroring the same shallow-merge pattern used by "Restore into
  * controls"). `data` is always forced back to `targetData` afterwards, even
  * if the stored style JSON carries a different (stale) `data` value.
  *
- * `savedVersions` does not need to be pre-sorted — the latest is taken as
- * the one with the highest `version` number.
+ * By default the LATEST version is used (highest `version` number,
+ * `savedVersions` does not need to be pre-sorted). Pass `preferredVersion`
+ * to pick a specific older version instead — e.g. the Detail view's saved-QR
+ * gallery lets the user jump straight into a specific past version rather
+ * than always landing on the latest. If `preferredVersion` is given but no
+ * matching version exists in `savedVersions`, this falls back to the
+ * existing latest-version behavior.
  */
 export function resolveOptionsForTarget(
   targetData: string,
   savedVersions: StyleVersionDto[],
+  preferredVersion?: number,
 ): AppQrOptions {
   const base = defaultOptions(targetData);
 
@@ -31,9 +37,11 @@ export function resolveOptionsForTarget(
     return base;
   }
 
-  const latest = savedVersions.reduce((a, b) => (b.version > a.version ? b : a));
+  const preferredMatch =
+    preferredVersion !== undefined ? savedVersions.find((v) => v.version === preferredVersion) : undefined;
+  const chosen = preferredMatch ?? savedVersions.reduce((a, b) => (b.version > a.version ? b : a));
 
-  const merged = { ...base, ...(latest.style as Partial<AppQrOptions>) } as AppQrOptions;
+  const merged = { ...base, ...(chosen.style as Partial<AppQrOptions>) } as AppQrOptions;
   merged.data = targetData;
   return merged;
 }

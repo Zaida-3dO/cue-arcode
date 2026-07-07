@@ -77,13 +77,15 @@ type View = 'list' | 'detail' | 'qr-studio' | 'settings';
 type ThemeChoice = 'system' | 'light' | 'dark';
 const THEME_STORAGE_KEY = 'cuearcode-theme';
 
-// Placeholder `data` used for the "(ad-hoc — not tied to a slug)" mode —
-// both on initial boot and whenever the active-slug dropdown is switched
-// back to ad-hoc.
-const ADHOC_PLACEHOLDER_DATA = `${REDIRECT_BASE_URL}/example`;
+// Placeholder `data` for the brief pre-boot instant before any redirect has
+// been fetched and a slug selected — QR Studio is always entered bound to a
+// real slug (via Detail view's "Generate QR Code" or the version gallery),
+// so this value is never actually shown to the user; it only seeds the
+// (hidden) initial render so `options` is never in an invalid state.
+const INITIAL_PLACEHOLDER_DATA = `${REDIRECT_BASE_URL}/example`;
 
 export function initUi(): void {
-  let options: AppQrOptions = defaultOptions(ADHOC_PLACEHOLDER_DATA);
+  let options: AppQrOptions = defaultOptions(INITIAL_PLACEHOLDER_DATA);
   let redirects: RedirectDto[] = [];
   let selectedSlug: string | null = null;
   let qr: QRCodeStyling | undefined;
@@ -125,11 +127,14 @@ export function initUi(): void {
     detailRedirectUrl: byId<HTMLElement>('detail-redirect-url'),
     detailGenerateQrBtn: byId<HTMLButtonElement>('detail-generate-qr-btn'),
     detailDeleteBtn: byId<HTMLButtonElement>('detail-delete-btn'),
+    detailQrGallerySection: byId<HTMLElement>('detail-qr-gallery-section'),
+    detailQrGallery: byId<HTMLUListElement>('detail-qr-gallery'),
 
     // QR Studio view
     qrBackBtn: byId<HTMLButtonElement>('qr-back-btn'),
-    activeSlug: byId<HTMLSelectElement>('active-slug'),
-    qrData: byId<HTMLInputElement>('qr-data'),
+    qrDisplayName: byId<HTMLHeadingElement>('qr-display-name'),
+    qrSlug: byId<HTMLElement>('qr-slug'),
+    qrData: byId<HTMLElement>('qr-data'),
 
     dotStyle: byId<HTMLSelectElement>('dot-style'),
     dotRadiusStep: byId<HTMLSelectElement>('dot-radius-step'),
@@ -239,7 +244,7 @@ export function initUi(): void {
   });
 
   function syncControlsFromOptions(): void {
-    els.qrData.value = options.data;
+    els.qrData.textContent = options.data;
     els.dotStyle.value = options.dotsOptions.type;
     els.dotColor.value = options.dotsOptions.color;
     els.cornerSquareStyle.value = options.cornersSquareOptions.type;
@@ -420,26 +425,9 @@ export function initUi(): void {
     }
   }
 
-  function renderActiveSlugOptions(): void {
-    els.activeSlug.innerHTML = '';
-    const noneOpt = document.createElement('option');
-    noneOpt.value = '';
-    noneOpt.textContent = '(ad-hoc — not tied to a slug)';
-    els.activeSlug.appendChild(noneOpt);
-
-    for (const r of redirects) {
-      const opt = document.createElement('option');
-      opt.value = r.slug;
-      opt.textContent = r.slug;
-      els.activeSlug.appendChild(opt);
-    }
-    els.activeSlug.value = selectedSlug ?? '';
-  }
-
   async function refreshRedirects(): Promise<void> {
     redirects = await listRedirects();
     renderRedirectList();
-    renderActiveSlugOptions();
   }
 
   // ---- Detail view ----
@@ -454,7 +442,49 @@ export function initUi(): void {
     els.detailTargetUrlInput.value = row.target_url;
     els.detailRedirectUrl.textContent = row.redirect_url;
     els.detailSaveStatus.textContent = '';
+    // Clear synchronously so a stale previous slug's gallery never flashes
+    // while this slug's versions are still in flight.
+    els.detailQrGallery.innerHTML = '';
+    els.detailQrGallerySection.hidden = true;
     showView('detail');
+    void refreshDetailQrGallery(slug);
+  }
+
+  /** Fetches `slug`'s saved QR style versions and (re)renders the Detail view's gallery. */
+  async function refreshDetailQrGallery(slug: string): Promise<void> {
+    const versions = await listStyleVersions(slug);
+    // The user may have navigated away from this slug's Detail view before
+    // the fetch resolved — don't paint a stale gallery over whatever's now showing.
+    if (detailSlug !== slug) return;
+    renderDetailQrGallery(slug, versions);
+  }
+
+  /** Renders the Detail view's "Saved QR styles" gallery — hidden entirely when there's nothing saved yet. */
+  function renderDetailQrGallery(slug: string, versions: StyleVersionDto[]): void {
+    els.detailQrGallery.innerHTML = '';
+    if (versions.length === 0) {
+      els.detailQrGallerySection.hidden = true;
+      return;
+    }
+    els.detailQrGallerySection.hidden = false;
+
+    const sorted = [...versions].sort((a, b) => b.version - a.version);
+    for (const v of sorted) {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'gallery-version-btn';
+      btn.textContent = `v${v.version} — ${new Date(v.created_at).toLocaleString()}`;
+      btn.addEventListener('click', () => {
+        qrStudioOrigin = slug;
+        void (async () => {
+          await selectSlugWithVersion(slug, v.version);
+          showView('qr-studio');
+        })();
+      });
+      li.appendChild(btn);
+      els.detailQrGallery.appendChild(li);
+    }
   }
 
   els.detailBackBtn.addEventListener('click', () => {
@@ -512,31 +542,40 @@ export function initUi(): void {
     })();
   });
 
-  async function selectSlug(slug: string): Promise<void> {
-    selectedSlug = slug;
-    els.activeSlug.value = slug;
+  /** Populates the QR Studio identity header (display name + slug) for `slug`. */
+  function updateQrIdentity(slug: string, row: RedirectDto | undefined): void {
+    els.qrDisplayName.textContent = row ? row.display_name : slug;
+    els.qrSlug.textContent = slug;
+  }
 
+  /**
+   * Loads QR Studio for `slug`. By default loads that slug's latest saved
+   * style (or clean defaults if it has none) — this is the existing,
+   * established behavior "Generate QR Code" relies on and must not change.
+   * Pass `preferredVersion` to instead load one specific older saved
+   * version (used by the Detail view's saved-QR gallery).
+   */
+  async function selectSlug(slug: string, preferredVersion?: number): Promise<void> {
+    selectedSlug = slug;
     const row = redirects.find((r) => r.slug === slug);
+    updateQrIdentity(slug, row);
+
     const targetData = row ? row.redirect_url : options.data;
     // Always rebuild from a clean base for the new target — never carry
-    // forward whatever the previously-active slug (or ad-hoc session) left
-    // in `options`. If the slug has saved style history, its latest version
-    // is merged on top of that clean base; otherwise it's plain defaults.
+    // forward whatever the previously-active slug left in `options`. If the
+    // slug has saved style history, the relevant version (latest, or
+    // `preferredVersion` when given) is merged on top of that clean base;
+    // otherwise it's plain defaults.
     const versions = await listStyleVersions(slug);
-    options = resolveOptionsForTarget(targetData, versions);
+    options = resolveOptionsForTarget(targetData, versions, preferredVersion);
     syncControlsFromOptions();
     scheduleRender();
     renderHistory(versions);
   }
 
-  /** Switches QR Studio to ad-hoc mode (no slug), resetting `options` to a clean base. */
-  async function selectAdHoc(): Promise<void> {
-    selectedSlug = null;
-    els.activeSlug.value = '';
-    options = resolveOptionsForTarget(ADHOC_PLACEHOLDER_DATA, []);
-    syncControlsFromOptions();
-    scheduleRender();
-    await refreshHistory();
+  /** Thin wrapper over `selectSlug` for jumping straight to one specific saved version (Detail view's gallery). */
+  function selectSlugWithVersion(slug: string, version: number): Promise<void> {
+    return selectSlug(slug, version);
   }
 
   /** Confirms, deletes, and refreshes the list. Returns whether it actually deleted. */
@@ -589,14 +628,6 @@ export function initUi(): void {
         els.createStatus.textContent = `Failed to create redirect: ${(err as Error).message}`;
       }
     })();
-  });
-
-  els.activeSlug.addEventListener('change', () => {
-    if (els.activeSlug.value) {
-      void selectSlug(els.activeSlug.value);
-    } else {
-      void selectAdHoc();
-    }
   });
 
   // ---- QR Studio back navigation ----

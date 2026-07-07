@@ -98,6 +98,11 @@
         <button type="button" id="detail-generate-qr-btn">Generate QR Code</button>
         <button type="button" id="detail-delete-btn" class="danger-btn">Delete redirect</button>
       </div>
+
+      <div id="detail-qr-gallery-section" class="detail-qr-gallery-section" hidden>
+        <h3>Saved QR styles</h3>
+        <ul id="detail-qr-gallery" class="style-history"></ul>
+      </div>
     </section>
 
     <!-- ---- QR Studio view ---- -->
@@ -106,12 +111,9 @@
       <h2>QR Studio</h2>
 
       <div class="stack">
-        <label>Slug in use
-          <select id="active-slug"></select>
-        </label>
-        <label>QR data (URL encoded)
-          <input type="text" id="qr-data" readonly />
-        </label>
+        <h2 id="qr-display-name">&nbsp;</h2>
+        <p class="detail-meta">ID: <code id="qr-slug"></code></p>
+        <p class="detail-meta">QR data: <code id="qr-data"></code></p>
       </div>
 
       <div class="preset-row">
