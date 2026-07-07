@@ -448,13 +448,6 @@ details.control-section > *:not(summary) {
   word-break: break-all;
 }
 
-.redirect-card .row-actions {
-  padding: 0 0.9rem 0.75rem;
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-}
-
 .style-history .row-actions {
   display: flex;
   gap: 0.4rem;

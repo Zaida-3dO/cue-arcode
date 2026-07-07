@@ -415,20 +415,7 @@ export function initUi(): void {
         }
       });
 
-      const actions = document.createElement('div');
-      actions.className = 'row-actions';
-
-      const delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'danger-btn';
-      delBtn.textContent = 'Delete';
-      delBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        void removeRedirect(r.slug);
-      });
-      actions.appendChild(delBtn);
-
-      li.append(body, actions);
+      li.append(body);
       els.redirectList.appendChild(li);
     }
   }
