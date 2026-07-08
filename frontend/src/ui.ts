@@ -23,6 +23,7 @@ import { resolveErrorCorrectionLevel } from './qr/eccPolicy.js';
 import { loadIconAsDataUrl } from './qr/iconLoader.js';
 import { getRawDataAsCanvas, applyOverallRadius, applyImageBorder, exportCanvas } from './qr/wrapper.js';
 import { decodeAndVerify } from './qr/testScan.js';
+import { createColorSwatchPicker, type ColorSwatchPickerHandle } from './ui/colorSwatchPicker.js';
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -137,14 +138,14 @@ export function initUi(): void {
 
     dotStyle: byId<HTMLSelectElement>('dot-style'),
     dotRadiusStep: byId<HTMLSelectElement>('dot-radius-step'),
-    dotColor: byId<HTMLInputElement>('dot-color'),
+    dotColorMount: byId<HTMLElement>('dot-color-mount'),
     cornerSquareStyle: byId<HTMLSelectElement>('corner-square-style'),
-    cornerSquareColor: byId<HTMLInputElement>('corner-square-color'),
+    cornerSquareColorMount: byId<HTMLElement>('corner-square-color-mount'),
     cornerDotStyle: byId<HTMLSelectElement>('corner-dot-style'),
-    cornerDotColor: byId<HTMLInputElement>('corner-dot-color'),
+    cornerDotColorMount: byId<HTMLElement>('corner-dot-color-mount'),
 
     bgEnabled: byId<HTMLInputElement>('bg-enabled'),
-    bgColor: byId<HTMLInputElement>('bg-color'),
+    bgColorMount: byId<HTMLElement>('bg-color-mount'),
 
     margin: byId<HTMLInputElement>('margin'),
     marginValue: byId<HTMLSpanElement>('margin-value'),
@@ -156,7 +157,7 @@ export function initUi(): void {
     borderThicknessValue: byId<HTMLSpanElement>('border-thickness-value'),
     borderRadius: byId<HTMLInputElement>('border-radius'),
     borderRadiusValue: byId<HTMLSpanElement>('border-radius-value'),
-    borderColor: byId<HTMLInputElement>('border-color'),
+    borderColorMount: byId<HTMLElement>('border-color-mount'),
 
     iconFile: byId<HTMLInputElement>('icon-file'),
     iconRemove: byId<HTMLButtonElement>('icon-remove'),
@@ -183,6 +184,62 @@ export function initUi(): void {
     // Settings view
     themeSelect: byId<HTMLSelectElement>('theme-select'),
   };
+
+  // ---- Color swatch pickers (Dots/Corners/Background/Border color controls) ----
+  //
+  // Each replaces what used to be a bare <input type="color">: mounted into
+  // its `*-color-mount` container, wired to update `options` and re-render on
+  // change (same behavior the raw inputs' 'input' listeners used to provide),
+  // and kept in sync via `.setColor()` from `syncControlsFromOptions()`.
+  const dotColorPicker: ColorSwatchPickerHandle = createColorSwatchPicker({
+    initialColor: options.dotsOptions.color,
+    label: 'Dot color',
+    onChange: (color) => {
+      options.dotsOptions.color = color;
+      scheduleRender();
+    },
+  });
+  els.dotColorMount.appendChild(dotColorPicker.element);
+
+  const cornerSquareColorPicker: ColorSwatchPickerHandle = createColorSwatchPicker({
+    initialColor: options.cornersSquareOptions.color,
+    label: 'Corner square color',
+    onChange: (color) => {
+      options.cornersSquareOptions.color = color;
+      scheduleRender();
+    },
+  });
+  els.cornerSquareColorMount.appendChild(cornerSquareColorPicker.element);
+
+  const cornerDotColorPicker: ColorSwatchPickerHandle = createColorSwatchPicker({
+    initialColor: options.cornersDotOptions.color,
+    label: 'Corner dot color',
+    onChange: (color) => {
+      options.cornersDotOptions.color = color;
+      scheduleRender();
+    },
+  });
+  els.cornerDotColorMount.appendChild(cornerDotColorPicker.element);
+
+  const bgColorPicker: ColorSwatchPickerHandle = createColorSwatchPicker({
+    initialColor: options.backgroundOptions.color,
+    label: 'Background color',
+    onChange: (color) => {
+      options.backgroundOptions.color = color;
+      scheduleRender();
+    },
+  });
+  els.bgColorMount.appendChild(bgColorPicker.element);
+
+  const borderColorPicker: ColorSwatchPickerHandle = createColorSwatchPicker({
+    initialColor: options.appExtensions.border.color,
+    label: 'Border color',
+    onChange: (color) => {
+      options.appExtensions.border.color = color;
+      scheduleRender();
+    },
+  });
+  els.borderColorMount.appendChild(borderColorPicker.element);
 
   // ---- View navigation ----
 
@@ -359,13 +416,13 @@ export function initUi(): void {
   function syncControlsFromOptions(): void {
     els.qrData.textContent = options.data;
     els.dotStyle.value = options.dotsOptions.type;
-    els.dotColor.value = options.dotsOptions.color;
+    dotColorPicker.setColor(options.dotsOptions.color);
     els.cornerSquareStyle.value = options.cornersSquareOptions.type;
-    els.cornerSquareColor.value = options.cornersSquareOptions.color;
+    cornerSquareColorPicker.setColor(options.cornersSquareOptions.color);
     els.cornerDotStyle.value = options.cornersDotOptions.type;
-    els.cornerDotColor.value = options.cornersDotOptions.color;
+    cornerDotColorPicker.setColor(options.cornersDotOptions.color);
     els.bgEnabled.checked = options.backgroundOptions.enabled;
-    els.bgColor.value = options.backgroundOptions.color;
+    bgColorPicker.setColor(options.backgroundOptions.color);
     els.margin.value = String(options.margin);
     els.marginValue.textContent = String(options.margin);
     els.overallRadius.value = String(options.appExtensions.overallRadiusPx);
@@ -375,7 +432,7 @@ export function initUi(): void {
     els.borderThicknessValue.textContent = String(options.appExtensions.border.thicknessPx);
     els.borderRadius.value = String(options.appExtensions.border.radiusPx);
     els.borderRadiusValue.textContent = String(options.appExtensions.border.radiusPx);
-    els.borderColor.value = options.appExtensions.border.color;
+    borderColorPicker.setColor(options.appExtensions.border.color);
     els.iconSize.value = String(Math.round(options.imageOptions.imageSizeRatio * 100));
     els.iconSizeValue.textContent = String(Math.round(options.imageOptions.imageSizeRatio * 100));
     els.eccLevel.value = options.qrOptions.errorCorrectionLevel;
@@ -820,32 +877,16 @@ export function initUi(): void {
     els.dotStyle.value = step;
     scheduleRender();
   });
-  els.dotColor.addEventListener('input', () => {
-    options.dotsOptions.color = els.dotColor.value;
-    scheduleRender();
-  });
   els.cornerSquareStyle.addEventListener('change', () => {
     options.cornersSquareOptions.type = els.cornerSquareStyle.value as AppQrOptions['cornersSquareOptions']['type'];
-    scheduleRender();
-  });
-  els.cornerSquareColor.addEventListener('input', () => {
-    options.cornersSquareOptions.color = els.cornerSquareColor.value;
     scheduleRender();
   });
   els.cornerDotStyle.addEventListener('change', () => {
     options.cornersDotOptions.type = els.cornerDotStyle.value as AppQrOptions['cornersDotOptions']['type'];
     scheduleRender();
   });
-  els.cornerDotColor.addEventListener('input', () => {
-    options.cornersDotOptions.color = els.cornerDotColor.value;
-    scheduleRender();
-  });
   els.bgEnabled.addEventListener('change', () => {
     options.backgroundOptions.enabled = els.bgEnabled.checked;
-    scheduleRender();
-  });
-  els.bgColor.addEventListener('input', () => {
-    options.backgroundOptions.color = els.bgColor.value;
     scheduleRender();
   });
   els.margin.addEventListener('input', () => {
@@ -870,10 +911,6 @@ export function initUi(): void {
   els.borderRadius.addEventListener('input', () => {
     options.appExtensions.border.radiusPx = Number(els.borderRadius.value);
     els.borderRadiusValue.textContent = els.borderRadius.value;
-    scheduleRender();
-  });
-  els.borderColor.addEventListener('input', () => {
-    options.appExtensions.border.color = els.borderColor.value;
     scheduleRender();
   });
   els.iconSize.addEventListener('input', () => {
