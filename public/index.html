@@ -86,7 +86,7 @@
     <section class="view panel" id="view-detail" hidden>
       <button type="button" id="detail-back-btn" class="link-btn">&larr; Back to redirects</button>
 
-      <h2 id="detail-display-name">&nbsp;</h2>
+      <h2 id="detail-display-name" class="identity-heading">&nbsp;</h2>
       <p class="detail-meta">You are viewing: <code id="detail-slug"></code></p>
 
       <form id="detail-form" class="stack">
@@ -120,10 +120,10 @@
     <!-- ---- QR Studio view ---- -->
     <section class="view panel" id="view-qr-studio" hidden>
       <button type="button" id="qr-back-btn" class="link-btn">&larr; Back</button>
-      <h2>QR Studio</h2>
+      <h2 class="eyebrow-heading">QR Studio</h2>
 
       <div class="stack">
-        <h2 id="qr-display-name">&nbsp;</h2>
+        <h2 id="qr-display-name" class="identity-heading">&nbsp;</h2>
         <p class="detail-meta">ID: <code id="qr-slug"></code></p>
         <p class="detail-meta">QR data: <code id="qr-data"></code></p>
       </div>
@@ -137,20 +137,30 @@
 
       <div class="studio-grid">
         <div class="controls">
+          <details class="control-section history-section" open>
+            <summary>History</summary>
+            <ul id="style-history" class="style-history"></ul>
+          </details>
+
           <p class="hint">Advanced styling — expand a section to adjust it.</p>
 
           <details class="control-section">
             <summary>Dots</summary>
-            <label>Style
-              <select id="dot-style">
-                <option value="square">Square</option>
-                <option value="rounded">Rounded</option>
-                <option value="dots">Bubble (dots)</option>
-                <option value="classy">Classy</option>
-                <option value="classy-rounded">Classy rounded</option>
-                <option value="extra-rounded">Extra rounded</option>
-              </select>
-            </label>
+            <div class="control-row">
+              <label>Style
+                <select id="dot-style">
+                  <option value="square">Square</option>
+                  <option value="rounded">Rounded</option>
+                  <option value="dots">Bubble (dots)</option>
+                  <option value="classy">Classy</option>
+                  <option value="classy-rounded">Classy rounded</option>
+                  <option value="extra-rounded">Extra rounded</option>
+                </select>
+              </label>
+              <label class="color-field">Dot color
+                <div id="dot-color-mount" class="color-picker-mount"></div>
+              </label>
+            </div>
             <label>Radius (v1 stepped — see note)
               <select id="dot-radius-step">
                 <option value="square">Square (0)</option>
@@ -160,32 +170,43 @@
             </label>
             <p class="hint">A true continuous radius slider isn't natively possible with the current QR
               library (discrete shapes only) — this stepped control is the deliberate v1 stand-in.</p>
-            <label>Dot color <input type="color" id="dot-color" value="#000000" /></label>
           </details>
 
           <details class="control-section">
             <summary>Corner eyes</summary>
-            <label>Corner square (frame)
-              <select id="corner-square-style">
-                <option value="square">Square</option>
-                <option value="dot">Circle</option>
-                <option value="extra-rounded">Extra rounded</option>
-              </select>
-            </label>
-            <label>Corner square color <input type="color" id="corner-square-color" value="#000000" /></label>
-            <label>Corner dot (pupil)
-              <select id="corner-dot-style">
-                <option value="square">Square</option>
-                <option value="dot">Circle</option>
-              </select>
-            </label>
-            <label>Corner dot color <input type="color" id="corner-dot-color" value="#000000" /></label>
+            <div class="control-row">
+              <label>Corner square (frame)
+                <select id="corner-square-style">
+                  <option value="square">Square</option>
+                  <option value="dot">Circle</option>
+                  <option value="extra-rounded">Extra rounded</option>
+                </select>
+              </label>
+              <label class="color-field">Corner square color
+                <div id="corner-square-color-mount" class="color-picker-mount"></div>
+              </label>
+            </div>
+            <div class="control-row">
+              <label>Corner dot (pupil)
+                <select id="corner-dot-style">
+                  <option value="square">Square</option>
+                  <option value="dot">Circle</option>
+                </select>
+              </label>
+              <label class="color-field">Corner dot color
+                <div id="corner-dot-color-mount" class="color-picker-mount"></div>
+              </label>
+            </div>
           </details>
 
           <details class="control-section">
             <summary>Background</summary>
-            <label><input type="checkbox" id="bg-enabled" checked /> Background enabled</label>
-            <label>Color <input type="color" id="bg-color" value="#ffffff" /></label>
+            <div class="control-row control-row-center">
+              <label><input type="checkbox" id="bg-enabled" checked /> Background enabled</label>
+              <label class="color-field">Color
+                <div id="bg-color-mount" class="color-picker-mount"></div>
+              </label>
+            </div>
           </details>
 
           <details class="control-section">
@@ -201,14 +222,18 @@
           <details class="control-section">
             <summary>Image border</summary>
             <p class="hint">Independent radius from the overall shape above.</p>
-            <label><input type="checkbox" id="border-enabled" /> Border enabled</label>
+            <div class="control-row control-row-center">
+              <label><input type="checkbox" id="border-enabled" /> Border enabled</label>
+              <label class="color-field">Border color
+                <div id="border-color-mount" class="color-picker-mount"></div>
+              </label>
+            </div>
             <label><span class="control-label">Thickness (<span id="border-thickness-value">4</span>px)</span>
               <input type="range" id="border-thickness" min="1" max="30" value="4" />
             </label>
             <label><span class="control-label">Border radius (<span id="border-radius-value">0</span>px)</span>
               <input type="range" id="border-radius" min="0" max="120" value="0" />
             </label>
-            <label>Border color <input type="color" id="border-color" value="#000000" /></label>
           </details>
 
           <details class="control-section">
@@ -261,11 +286,6 @@
           <div class="stack">
             <button type="button" id="save-style-btn">Save style (new version)</button>
             <p id="save-style-status" class="status"></p>
-          </div>
-
-          <div>
-            <h3>History</h3>
-            <ul id="style-history" class="style-history"></ul>
           </div>
         </div>
       </div>

@@ -10,6 +10,29 @@
   --danger: #d6455a;
   --danger-fg: #ffffff;
   --warn: #b3540c;
+
+  /* ---- Design tokens (radius / spacing / elevation) ----
+     One small scale each, so future tuning is a one-line change instead of
+     a grep-and-replace. Radius: small controls get -sm, cards/sections get
+     -md, top-level view panels get -lg. Spacing: -1..-5 roughly follow a
+     4/8/12/16/24px rhythm. Elevation: -sm for cards/list-items/popovers,
+     -md for the main view panels. Shadow values are redefined per-theme
+     below/in the dark media query — a shadow tuned for white surfaces reads
+     as "flat nothing" against a near-black background, so dark mode gets
+     higher-opacity shadows plus a faint inset top highlight instead of a
+     straight opacity cut. */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+
+  --shadow-sm: 0 1px 2px rgba(22, 22, 26, 0.07), 0 1px 1px rgba(22, 22, 26, 0.05);
+  --shadow-md: 0 8px 20px rgba(22, 22, 26, 0.10), 0 2px 6px rgba(22, 22, 26, 0.06);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,6 +45,9 @@
     --accent: #2dd4c4;
     --danger: #ff7a86;
     --warn: #f3b165;
+
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 }
 
@@ -43,6 +69,8 @@
   --danger: #d6455a;
   --danger-fg: #ffffff;
   --warn: #b3540c;
+  --shadow-sm: 0 1px 2px rgba(22, 22, 26, 0.07), 0 1px 1px rgba(22, 22, 26, 0.05);
+  --shadow-md: 0 8px 20px rgba(22, 22, 26, 0.10), 0 2px 6px rgba(22, 22, 26, 0.06);
 }
 
 :root[data-theme="dark"] {
@@ -57,6 +85,8 @@
   --danger: #ff7a86;
   --danger-fg: #2a0a0d;
   --warn: #f3b165;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 * {
@@ -77,6 +107,8 @@
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
   background: var(--bg);
   color: var(--fg);
 }
@@ -93,11 +125,15 @@ body {
 
 .topbar h1 {
   margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   color: var(--accent);
 }
 
 .subtitle {
   margin: 0.2rem 0 0;
+  font-size: 0.85rem;
   opacity: 0.7;
 }
 
@@ -140,8 +176,9 @@ body {
 .panel {
   background: var(--panel-bg);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1rem 1.25rem 1.5rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-4) var(--space-5) var(--space-5);
 }
 
 .view-header {
@@ -161,11 +198,49 @@ h3 {
   color: var(--accent);
 }
 
+h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+/* The QR Studio page title ("QR Studio") sits directly above the item's
+   identity heading (#qr-display-name) — both were plain <h2>s and read as
+   equally important, burying the thing that actually matters (which
+   redirect you're styling). Demoting this one to a small uppercase eyebrow
+   label lets the identity heading below it read as clearly the most
+   prominent text on the view, while it stays a real heading for a11y. */
+.eyebrow-heading {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  opacity: 0.85;
+  margin: 0 0 var(--space-1);
+}
+
+/* The "who/what am I looking at" heading on Detail view and QR Studio
+   (#detail-display-name, #qr-display-name) — deliberately styled bigger and
+   higher-contrast than the plain h2/h3 accent-teal scale above, so it reads
+   as the single most prominent element on its view. */
+.identity-heading {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  margin: 0;
+}
+
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  margin: 0.75rem 0;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
 }
 
 label {
@@ -204,15 +279,31 @@ select,
 button {
   font: inherit;
   padding: 0.4rem 0.5rem;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--fg);
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }
 
 input[type="checkbox"] {
   width: auto;
   padding: 0;
+}
+
+/* Uniform keyboard-focus styling for every interactive element — buttons,
+   inputs, selects, links. Previously only the redirect-card body had a
+   focus-visible rule; this makes the whole app consistently
+   keyboard-navigable. More specific rules further down (e.g. .id-compound's
+   inset outline) intentionally override this where the default outset ring
+   would visually overflow a compound control. */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 button {
@@ -225,6 +316,11 @@ button {
 
 button:hover {
   filter: brightness(1.08);
+}
+
+button:active {
+  filter: brightness(0.96);
+  transform: scale(0.97);
 }
 
 button.secondary-btn {
@@ -251,18 +347,23 @@ button.link-btn:hover {
   text-decoration: underline;
 }
 
+button.link-btn:active {
+  transform: none;
+}
+
 a {
   color: var(--primary);
+  transition: color 0.15s ease;
 }
 
 fieldset {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  margin: 0 0 0.9rem;
-  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 legend {
@@ -272,16 +373,21 @@ legend {
 }
 
 /* QR Studio's advanced-settings sections: native <details>/<summary> so they
-   read as "advanced, collapsed by default" — expanded only on demand. */
+   read as "advanced, collapsed by default" — expanded only on demand. Also
+   reused (open by default) for the relocated History panel, so both share
+   the same visual language instead of History looking like a bolted-on
+   afterthought. */
 details.control-section {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  margin: 0 0 0.9rem;
-  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
 }
 
 details.control-section[open] {
-  padding-bottom: 0.75rem;
+  padding-bottom: var(--space-3);
 }
 
 details.control-section > summary {
@@ -291,6 +397,7 @@ details.control-section > summary {
   padding: 0.25rem 0;
   list-style: none;
   color: var(--accent);
+  transition: color 0.15s ease;
 }
 
 details.control-section > summary::-webkit-details-marker {
@@ -312,8 +419,23 @@ details.control-section > summary:hover {
   text-decoration: underline;
 }
 
+details.control-section > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
 details.control-section > *:not(summary) {
-  margin-top: 0.6rem;
+  margin-top: var(--space-2);
+}
+
+/* The relocated History panel reuses .control-section's chrome but is
+   pinned open by default and given a primary-tinted border (instead of the
+   neutral border every other advanced section gets) so it visually reads
+   as "context for what you're about to change", not just another
+   collapsible option among equals. */
+details.history-section {
+  border-color: var(--primary);
 }
 
 .hint {
@@ -328,10 +450,41 @@ details.control-section > *:not(summary) {
   margin: 0;
 }
 
+/* Groups two related controls (e.g. a style dropdown + its matching color
+   swatch) onto one row instead of always stacking vertically — saves
+   QR Studio's controls column a lot of dead vertical space. The dropdown
+   (or checkbox) label grows to fill the row; the color-field stays
+   content-sized so the round swatch button doesn't stretch. */
+.control-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-end;
+}
+
+.control-row > label {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.control-row > label.color-field {
+  flex: 0 0 auto;
+}
+
+/* Checkbox + swatch pairings (Background enabled, Border enabled) have no
+   label text stacked above the control on either side, so center-aligning
+   reads better than the default flex-end used for dropdown + swatch rows. */
+.control-row-center {
+  align-items: center;
+}
+
+.color-picker-mount {
+  display: inline-flex;
+}
+
 .studio-grid {
   display: grid;
   grid-template-columns: minmax(260px, 380px) 1fr;
-  gap: 1.5rem;
+  gap: var(--space-5);
 }
 
 @media (max-width: 1200px) {
@@ -343,19 +496,19 @@ details.control-section > *:not(summary) {
 .controls {
   max-height: 80vh;
   overflow-y: auto;
-  padding-right: 0.25rem;
+  padding-right: var(--space-1);
 }
 
 .preview-col {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
   align-items: flex-start;
 }
 
 .qr-preview {
   border: 1px dashed var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background:
     linear-gradient(45deg, #80808022 25%, transparent 25%, transparent 75%, #80808022 75%),
     linear-gradient(45deg, #80808022 25%, transparent 25%, transparent 75%, #80808022 75%);
@@ -379,8 +532,8 @@ details.control-section > *:not(summary) {
 .preset-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin: 0.5rem 0 1rem;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-4);
   flex-wrap: wrap;
 }
 
@@ -391,12 +544,14 @@ details.control-section > *:not(summary) {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: var(--space-2);
 }
 
 .style-history li {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
   padding: 0.5rem 0.65rem;
   display: flex;
   flex-direction: column;
@@ -449,7 +604,7 @@ details.control-section > *:not(summary) {
   display: flex;
   align-items: stretch;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--bg);
 }
@@ -483,17 +638,24 @@ details.control-section > *:not(summary) {
 
 .redirect-card {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
   background: var(--bg);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.redirect-card:hover {
+  box-shadow: var(--shadow-md);
 }
 
 .redirect-card .card-body {
-  padding: 0.75rem 0.9rem;
+  padding: var(--space-3) var(--space-4);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  transition: background-color 0.15s ease;
 }
 
 .redirect-card .card-body:hover {
@@ -506,7 +668,7 @@ details.control-section > *:not(summary) {
 }
 
 .card-title {
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--fg);
 }
@@ -603,4 +765,154 @@ details.control-section > *:not(summary) {
 
 .settings-block h3 {
   margin-top: 0;
+}
+
+/* ---- Color swatch picker (Dots/Corners/Background/Border color controls) ----
+   A round swatch button that opens a popover with a preset palette grid, a
+   native color-wheel fallback, and a hex input. See
+   frontend/src/ui/colorSwatchPicker.ts. All surface colors/tokens here reuse
+   the app's existing --primary/--border/--bg system rather than introducing
+   new hardcoded colors (the 16-swatch palette itself is the one deliberate
+   exception — an approved, pre-tested set carried over from a sibling
+   project). */
+
+.color-swatch-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+.color-swatch-button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.color-swatch-button:hover {
+  transform: scale(1.08);
+  border-color: var(--primary);
+}
+
+.color-swatch-button:active {
+  transform: scale(0.94);
+}
+
+.color-swatch-popover {
+  /* Fixed (not absolute) + positioned in JS from the button's rect on open —
+     see colorSwatchPicker.ts. It's appended to <body>, not the swatch's own
+     wrapper, so it isn't clipped by `.controls`' `overflow-y: auto`. */
+  position: fixed;
+  z-index: 30;
+  width: 232px;
+  padding: var(--space-3);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.color-swatch-popover-label {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.color-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.4rem;
+}
+
+.color-swatch-option {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.color-swatch-option:hover {
+  transform: scale(1.2);
+}
+
+.color-swatch-option.is-selected {
+  border-color: var(--fg);
+  box-shadow: 0 0 0 1px var(--bg);
+}
+
+.color-swatch-custom-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.color-swatch-wheel-label {
+  display: inline-flex;
+  margin: 0;
+}
+
+.color-swatch-wheel-input {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  background: none;
+}
+
+.color-swatch-wheel-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+  border-radius: 50%;
+}
+
+.color-swatch-wheel-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+.color-swatch-wheel-input::-moz-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+.color-swatch-hex-label {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin: 0;
+}
+
+.color-swatch-hex-input {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.4rem;
+}
+
+/* Visually hidden but still announced by screen readers — used for the
+   color-wheel input's accessible name, which has no visible text label
+   (the swatch itself is the visible affordance). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
