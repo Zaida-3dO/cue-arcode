@@ -101,8 +101,23 @@ export interface BorderOptions {
  * border — an independent on/off + thickness + radius, distinct from
  * applyOverallRadius above (that one rounds the QR grid; this one frames
  * the finished image, including any transparency from the radius clip).
+ *
+ * `overallRadiusPx` and `border.radiusPx` are two independent user-controlled
+ * sliders (overall QR corner radius vs. border radius) — they are NOT
+ * guaranteed to be equal. The outer frame legitimately uses `border.radiusPx`
+ * (a frame can be rounded differently from the image it surrounds), but the
+ * hole punched into the middle of that frame must match `source`'s actual
+ * corner shape exactly, or the two curves won't nest and a transparent
+ * notch/gap appears at each corner. So the caller passes `sourceRadiusPx` —
+ * the radius that was ACTUALLY baked into `source`'s corners by the
+ * preceding `applyOverallRadius()` call (or `0` if that step was skipped/a
+ * no-op) — and the inner hole is cut with THAT value, never `border.radiusPx`.
  */
-export function applyImageBorder(source: HTMLCanvasElement, border: BorderOptions): HTMLCanvasElement {
+export function applyImageBorder(
+  source: HTMLCanvasElement,
+  border: BorderOptions,
+  sourceRadiusPx: number,
+): HTMLCanvasElement {
   if (!border.enabled || border.thicknessPx <= 0) return source;
   const outW = source.width + border.thicknessPx * 2;
   const outH = source.height + border.thicknessPx * 2;
@@ -122,20 +137,22 @@ export function applyImageBorder(source: HTMLCanvasElement, border: BorderOption
   // colored. When the background IS enabled the QR is opaque there anyway, so
   // this is a no-op for that case.
   //
-  // The interior hole is cut with the SAME radius as the outer frame (just
-  // inset by thicknessPx on every side) rather than a hard rectangle. `source`
-  // was itself already corner-rounded by applyOverallRadius using this same
-  // border.radiusPx value — a rectangular hole and that rounded source curve
-  // don't nest cleanly, leaving a transparent gap/notch right at each corner
-  // (visible as a checkerboard "wedge" cut into the frame). Using a rounded
-  // hole with a matching radius, drawn with `destination-out` (clearRect can
-  // only cut rectangles), keeps the two curves concentric so they meet flush.
+  // The interior hole is cut with `sourceRadiusPx` — the radius actually
+  // baked into `source`'s corners (inset by thicknessPx on every side) —
+  // rather than `border.radiusPx` and rather than a hard rectangle. A
+  // rectangular hole, or one cut with a radius that doesn't match `source`'s
+  // real curve, don't nest cleanly, leaving a transparent gap/notch right at
+  // each corner (visible as a checkerboard "wedge" cut into the frame).
+  // Using a rounded hole with the matching radius, drawn with
+  // `destination-out` (clearRect can only cut rectangles), keeps the two
+  // curves concentric so they meet flush — independent of whatever
+  // `border.radiusPx` the outer frame itself is drawn with.
   drawRoundedRectPath(ctx, 0, 0, outW, outH, border.radiusPx);
   ctx.fillStyle = border.color;
   ctx.fill();
   ctx.save();
   ctx.globalCompositeOperation = 'destination-out';
-  drawRoundedRectPath(ctx, border.thicknessPx, border.thicknessPx, source.width, source.height, border.radiusPx);
+  drawRoundedRectPath(ctx, border.thicknessPx, border.thicknessPx, source.width, source.height, sourceRadiusPx);
   ctx.fill();
   ctx.restore();
   ctx.drawImage(source, border.thicknessPx, border.thicknessPx);

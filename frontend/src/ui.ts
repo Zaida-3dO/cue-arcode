@@ -460,7 +460,7 @@ export function initUi(): void {
       if (myGeneration !== renderGeneration) return; // superseded by a newer render
 
       canvas = applyOverallRadius(canvas, options.appExtensions.overallRadiusPx);
-      canvas = applyImageBorder(canvas, options.appExtensions.border);
+      canvas = applyImageBorder(canvas, options.appExtensions.border, options.appExtensions.overallRadiusPx);
 
       els.preview.width = canvas.width;
       els.preview.height = canvas.height;
