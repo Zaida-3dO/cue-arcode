@@ -48,14 +48,5 @@ export function createStylesRouter(db: CueArcodeDb): Router {
     });
   });
 
-  // Wipes ALL saved QR style-version history, for every slug — a Settings-view
-  // destructive action (see frontend Settings view). Does not touch the
-  // `redirects` table itself; per-redirect deletion already exists via
-  // DELETE /api/redirects/:slug.
-  router.delete('/', (_req, res) => {
-    const deleted = db.deleteAllStyleHistory();
-    res.json({ ok: true, deleted });
-  });
-
   return router;
 }

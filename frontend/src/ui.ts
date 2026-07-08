@@ -11,7 +11,6 @@ import {
   deleteRedirect,
   listStyleVersions,
   saveStyleVersion,
-  deleteAllStyleHistory,
   type RedirectDto,
   type StyleVersionDto,
 } from './api.js';
@@ -77,13 +76,15 @@ type View = 'list' | 'detail' | 'qr-studio' | 'settings';
 type ThemeChoice = 'system' | 'light' | 'dark';
 const THEME_STORAGE_KEY = 'cuearcode-theme';
 
-// Placeholder `data` used for the "(ad-hoc — not tied to a slug)" mode —
-// both on initial boot and whenever the active-slug dropdown is switched
-// back to ad-hoc.
-const ADHOC_PLACEHOLDER_DATA = `${REDIRECT_BASE_URL}/example`;
+// Placeholder `data` for the brief pre-boot instant before any redirect has
+// been fetched and a slug selected — QR Studio is always entered bound to a
+// real slug (via Detail view's "Generate QR Code" or the version gallery),
+// so this value is never actually shown to the user; it only seeds the
+// (hidden) initial render so `options` is never in an invalid state.
+const INITIAL_PLACEHOLDER_DATA = `${REDIRECT_BASE_URL}/example`;
 
 export function initUi(): void {
-  let options: AppQrOptions = defaultOptions(ADHOC_PLACEHOLDER_DATA);
+  let options: AppQrOptions = defaultOptions(INITIAL_PLACEHOLDER_DATA);
   let redirects: RedirectDto[] = [];
   let selectedSlug: string | null = null;
   let qr: QRCodeStyling | undefined;
@@ -108,6 +109,7 @@ export function initUi(): void {
     newRedirectToggle: byId<HTMLButtonElement>('new-redirect-toggle'),
     newRedirectCancel: byId<HTMLButtonElement>('new-redirect-cancel'),
     createForm: byId<HTMLFormElement>('create-redirect-form'),
+    newSlugDomain: byId<HTMLSelectElement>('new-slug-domain'),
     newSlug: byId<HTMLInputElement>('new-slug'),
     newDisplayName: byId<HTMLInputElement>('new-display-name'),
     newTargetUrl: byId<HTMLInputElement>('new-target-url'),
@@ -125,11 +127,14 @@ export function initUi(): void {
     detailRedirectUrl: byId<HTMLElement>('detail-redirect-url'),
     detailGenerateQrBtn: byId<HTMLButtonElement>('detail-generate-qr-btn'),
     detailDeleteBtn: byId<HTMLButtonElement>('detail-delete-btn'),
+    detailQrGallerySection: byId<HTMLElement>('detail-qr-gallery-section'),
+    detailQrGallery: byId<HTMLUListElement>('detail-qr-gallery'),
 
     // QR Studio view
     qrBackBtn: byId<HTMLButtonElement>('qr-back-btn'),
-    activeSlug: byId<HTMLSelectElement>('active-slug'),
-    qrData: byId<HTMLInputElement>('qr-data'),
+    qrDisplayName: byId<HTMLHeadingElement>('qr-display-name'),
+    qrSlug: byId<HTMLElement>('qr-slug'),
+    qrData: byId<HTMLElement>('qr-data'),
 
     dotStyle: byId<HTMLSelectElement>('dot-style'),
     dotRadiusStep: byId<HTMLSelectElement>('dot-radius-step'),
@@ -178,8 +183,6 @@ export function initUi(): void {
 
     // Settings view
     themeSelect: byId<HTMLSelectElement>('theme-select'),
-    wipeHistoryBtn: byId<HTMLButtonElement>('wipe-history-btn'),
-    wipeHistoryStatus: byId<HTMLParagraphElement>('wipe-history-status'),
   };
 
   // ---- View navigation ----
@@ -239,7 +242,7 @@ export function initUi(): void {
   });
 
   function syncControlsFromOptions(): void {
-    els.qrData.value = options.data;
+    els.qrData.textContent = options.data;
     els.dotStyle.value = options.dotsOptions.type;
     els.dotColor.value = options.dotsOptions.color;
     els.cornerSquareStyle.value = options.cornersSquareOptions.type;
@@ -415,44 +418,14 @@ export function initUi(): void {
         }
       });
 
-      const actions = document.createElement('div');
-      actions.className = 'row-actions';
-
-      const delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'danger-btn';
-      delBtn.textContent = 'Delete';
-      delBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        void removeRedirect(r.slug);
-      });
-      actions.appendChild(delBtn);
-
-      li.append(body, actions);
+      li.append(body);
       els.redirectList.appendChild(li);
     }
-  }
-
-  function renderActiveSlugOptions(): void {
-    els.activeSlug.innerHTML = '';
-    const noneOpt = document.createElement('option');
-    noneOpt.value = '';
-    noneOpt.textContent = '(ad-hoc — not tied to a slug)';
-    els.activeSlug.appendChild(noneOpt);
-
-    for (const r of redirects) {
-      const opt = document.createElement('option');
-      opt.value = r.slug;
-      opt.textContent = r.slug;
-      els.activeSlug.appendChild(opt);
-    }
-    els.activeSlug.value = selectedSlug ?? '';
   }
 
   async function refreshRedirects(): Promise<void> {
     redirects = await listRedirects();
     renderRedirectList();
-    renderActiveSlugOptions();
   }
 
   // ---- Detail view ----
@@ -467,7 +440,49 @@ export function initUi(): void {
     els.detailTargetUrlInput.value = row.target_url;
     els.detailRedirectUrl.textContent = row.redirect_url;
     els.detailSaveStatus.textContent = '';
+    // Clear synchronously so a stale previous slug's gallery never flashes
+    // while this slug's versions are still in flight.
+    els.detailQrGallery.innerHTML = '';
+    els.detailQrGallerySection.hidden = true;
     showView('detail');
+    void refreshDetailQrGallery(slug);
+  }
+
+  /** Fetches `slug`'s saved QR style versions and (re)renders the Detail view's gallery. */
+  async function refreshDetailQrGallery(slug: string): Promise<void> {
+    const versions = await listStyleVersions(slug);
+    // The user may have navigated away from this slug's Detail view before
+    // the fetch resolved — don't paint a stale gallery over whatever's now showing.
+    if (detailSlug !== slug) return;
+    renderDetailQrGallery(slug, versions);
+  }
+
+  /** Renders the Detail view's "Saved QR styles" gallery — hidden entirely when there's nothing saved yet. */
+  function renderDetailQrGallery(slug: string, versions: StyleVersionDto[]): void {
+    els.detailQrGallery.innerHTML = '';
+    if (versions.length === 0) {
+      els.detailQrGallerySection.hidden = true;
+      return;
+    }
+    els.detailQrGallerySection.hidden = false;
+
+    const sorted = [...versions].sort((a, b) => b.version - a.version);
+    for (const v of sorted) {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'gallery-version-btn';
+      btn.textContent = `v${v.version} — ${new Date(v.created_at).toLocaleString()}`;
+      btn.addEventListener('click', () => {
+        qrStudioOrigin = slug;
+        void (async () => {
+          await selectSlugWithVersion(slug, v.version);
+          showView('qr-studio');
+        })();
+      });
+      li.appendChild(btn);
+      els.detailQrGallery.appendChild(li);
+    }
   }
 
   els.detailBackBtn.addEventListener('click', () => {
@@ -525,31 +540,40 @@ export function initUi(): void {
     })();
   });
 
-  async function selectSlug(slug: string): Promise<void> {
-    selectedSlug = slug;
-    els.activeSlug.value = slug;
+  /** Populates the QR Studio identity header (display name + slug) for `slug`. */
+  function updateQrIdentity(slug: string, row: RedirectDto | undefined): void {
+    els.qrDisplayName.textContent = row ? row.display_name : slug;
+    els.qrSlug.textContent = slug;
+  }
 
+  /**
+   * Loads QR Studio for `slug`. By default loads that slug's latest saved
+   * style (or clean defaults if it has none) — this is the existing,
+   * established behavior "Generate QR Code" relies on and must not change.
+   * Pass `preferredVersion` to instead load one specific older saved
+   * version (used by the Detail view's saved-QR gallery).
+   */
+  async function selectSlug(slug: string, preferredVersion?: number): Promise<void> {
+    selectedSlug = slug;
     const row = redirects.find((r) => r.slug === slug);
+    updateQrIdentity(slug, row);
+
     const targetData = row ? row.redirect_url : options.data;
     // Always rebuild from a clean base for the new target — never carry
-    // forward whatever the previously-active slug (or ad-hoc session) left
-    // in `options`. If the slug has saved style history, its latest version
-    // is merged on top of that clean base; otherwise it's plain defaults.
+    // forward whatever the previously-active slug left in `options`. If the
+    // slug has saved style history, the relevant version (latest, or
+    // `preferredVersion` when given) is merged on top of that clean base;
+    // otherwise it's plain defaults.
     const versions = await listStyleVersions(slug);
-    options = resolveOptionsForTarget(targetData, versions);
+    options = resolveOptionsForTarget(targetData, versions, preferredVersion);
     syncControlsFromOptions();
     scheduleRender();
     renderHistory(versions);
   }
 
-  /** Switches QR Studio to ad-hoc mode (no slug), resetting `options` to a clean base. */
-  async function selectAdHoc(): Promise<void> {
-    selectedSlug = null;
-    els.activeSlug.value = '';
-    options = resolveOptionsForTarget(ADHOC_PLACEHOLDER_DATA, []);
-    syncControlsFromOptions();
-    scheduleRender();
-    await refreshHistory();
+  /** Thin wrapper over `selectSlug` for jumping straight to one specific saved version (Detail view's gallery). */
+  function selectSlugWithVersion(slug: string, version: number): Promise<void> {
+    return selectSlug(slug, version);
   }
 
   /** Confirms, deletes, and refreshes the list. Returns whether it actually deleted. */
@@ -572,9 +596,49 @@ export function initUi(): void {
 
   // ---- Create redirect (list view) ----
 
+  // The ID field's base-URL prefix reads as static text (like a phone
+  // number's "+44" country-code segment) but is a real <select> underneath —
+  // deliberately scoped to a single option for now (only one Cloudflare zone
+  // is wired up); more base domains can be added here later without any
+  // markup changes. Populated from the shared REDIRECT_BASE_URL constant
+  // (scheme stripped for display) rather than hardcoded in HTML, so the two
+  // never drift.
+  function initSlugDomainOptions(): void {
+    els.newSlugDomain.innerHTML = '';
+    const opt = document.createElement('option');
+    const displayPrefix = `${REDIRECT_BASE_URL.replace(/^https?:\/\//, '')}/`;
+    opt.value = displayPrefix;
+    opt.textContent = displayPrefix;
+    els.newSlugDomain.appendChild(opt);
+  }
+
+  // Slug/ID characters are filtered live as the user types — not just on
+  // submit — mirroring the server's authoritative pattern
+  // (SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/ in
+  // src/routes/redirects.ts): strip anything outside [a-z0-9-] and force
+  // lowercase, since that pattern is lowercase-only. This is a UX nicety
+  // only — the server remains the authoritative validator (it also checks
+  // the start/end-character and length rules this simpler live filter
+  // doesn't bother enforcing character-by-character).
+  const SLUG_UNSAFE_CHARS = /[^a-z0-9-]/g;
+
+  els.newSlug.addEventListener('input', () => {
+    const cursorPos = els.newSlug.selectionStart;
+    const before = els.newSlug.value;
+    const filtered = before.toLowerCase().replace(SLUG_UNSAFE_CHARS, '');
+    if (filtered !== before) {
+      els.newSlug.value = filtered;
+      // We only ever remove characters here, never insert, so clamping the
+      // original numeric offset to the new (shorter-or-equal) length keeps
+      // the cursor in a sane spot without needing a full diff.
+      const pos = Math.min(cursorPos ?? filtered.length, filtered.length);
+      els.newSlug.setSelectionRange(pos, pos);
+    }
+  });
+
   els.newRedirectToggle.addEventListener('click', () => {
     els.createForm.hidden = !els.createForm.hidden;
-    if (!els.createForm.hidden) els.newSlug.focus();
+    if (!els.createForm.hidden) els.newDisplayName.focus();
   });
 
   els.newRedirectCancel.addEventListener('click', () => {
@@ -602,14 +666,6 @@ export function initUi(): void {
         els.createStatus.textContent = `Failed to create redirect: ${(err as Error).message}`;
       }
     })();
-  });
-
-  els.activeSlug.addEventListener('change', () => {
-    if (els.activeSlug.value) {
-      void selectSlug(els.activeSlug.value);
-    } else {
-      void selectAdHoc();
-    }
   });
 
   // ---- QR Studio back navigation ----
@@ -832,27 +888,10 @@ export function initUi(): void {
     })();
   });
 
-  // ---- Settings: wipe style history ----
-
-  els.wipeHistoryBtn.addEventListener('click', () => {
-    const confirmed = window.confirm(
-      'This permanently deletes ALL saved QR style history for every redirect. This cannot be undone.',
-    );
-    if (!confirmed) return;
-    void (async () => {
-      try {
-        const { deleted } = await deleteAllStyleHistory();
-        els.wipeHistoryStatus.textContent = `Wiped ${deleted} saved style version${deleted === 1 ? '' : 's'}.`;
-        if (selectedSlug) await refreshHistory();
-      } catch (err) {
-        els.wipeHistoryStatus.textContent = `Failed to wipe history: ${(err as Error).message}`;
-      }
-    })();
-  });
-
   // ---- Boot ----
 
   initTheme();
+  initSlugDomainOptions();
   syncControlsFromOptions();
   scheduleRender();
   showView(currentView);

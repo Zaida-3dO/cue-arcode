@@ -121,10 +121,23 @@ export function applyImageBorder(source: HTMLCanvasElement, border: BorderOption
   // is what survives, so only the `thicknessPx` ring around the perimeter is
   // colored. When the background IS enabled the QR is opaque there anyway, so
   // this is a no-op for that case.
+  //
+  // The interior hole is cut with the SAME radius as the outer frame (just
+  // inset by thicknessPx on every side) rather than a hard rectangle. `source`
+  // was itself already corner-rounded by applyOverallRadius using this same
+  // border.radiusPx value — a rectangular hole and that rounded source curve
+  // don't nest cleanly, leaving a transparent gap/notch right at each corner
+  // (visible as a checkerboard "wedge" cut into the frame). Using a rounded
+  // hole with a matching radius, drawn with `destination-out` (clearRect can
+  // only cut rectangles), keeps the two curves concentric so they meet flush.
   drawRoundedRectPath(ctx, 0, 0, outW, outH, border.radiusPx);
   ctx.fillStyle = border.color;
   ctx.fill();
-  ctx.clearRect(border.thicknessPx, border.thicknessPx, source.width, source.height);
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out';
+  drawRoundedRectPath(ctx, border.thicknessPx, border.thicknessPx, source.width, source.height, border.radiusPx);
+  ctx.fill();
+  ctx.restore();
   ctx.drawImage(source, border.thicknessPx, border.thicknessPx);
   return out;
 }

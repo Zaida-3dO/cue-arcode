@@ -51,15 +51,27 @@
       </div>
 
       <form id="create-redirect-form" class="stack" hidden>
-        <label><span class="control-label">Slug</span>
-          <input type="text" id="new-slug" placeholder="review-etsy" required />
-        </label>
-        <label><span class="control-label">Display name</span>
-          <input type="text" id="new-display-name" placeholder="Etsy reviews (defaults to slug)" maxlength="200" />
-        </label>
+        <div class="create-form-row">
+          <label class="create-field create-field-name"><span class="control-label control-label-prominent">Display name</span>
+            <input type="text" id="new-display-name" class="input-prominent" placeholder="Etsy reviews (defaults to slug)" maxlength="200" />
+          </label>
+          <div class="create-field create-field-id">
+            <label for="new-slug" class="control-label">ID</label>
+            <div class="id-compound">
+              <select id="new-slug-domain" aria-label="Base URL"></select>
+              <input type="text" id="new-slug" placeholder="review-etsy" required autocomplete="off" spellcheck="false"
+                title="This cannot be changed once created." />
+            </div>
+            <p class="hint">This cannot be changed once created.</p>
+          </div>
+        </div>
+
         <label><span class="control-label">Target URL</span>
-          <input type="url" id="new-target-url" placeholder="https://example.com/…" required />
+          <input type="url" id="new-target-url" placeholder="https://example.com/…" required
+            title="You can update this anytime." />
         </label>
+        <p class="hint">You can update this anytime.</p>
+
         <div class="row-actions">
           <button type="submit">Create redirect</button>
           <button type="button" id="new-redirect-cancel" class="secondary-btn">Cancel</button>
@@ -98,6 +110,11 @@
         <button type="button" id="detail-generate-qr-btn">Generate QR Code</button>
         <button type="button" id="detail-delete-btn" class="danger-btn">Delete redirect</button>
       </div>
+
+      <div id="detail-qr-gallery-section" class="detail-qr-gallery-section" hidden>
+        <h3>Saved QR styles</h3>
+        <ul id="detail-qr-gallery" class="style-history"></ul>
+      </div>
     </section>
 
     <!-- ---- QR Studio view ---- -->
@@ -106,12 +123,9 @@
       <h2>QR Studio</h2>
 
       <div class="stack">
-        <label>Slug in use
-          <select id="active-slug"></select>
-        </label>
-        <label>QR data (URL encoded)
-          <input type="text" id="qr-data" readonly />
-        </label>
+        <h2 id="qr-display-name">&nbsp;</h2>
+        <p class="detail-meta">ID: <code id="qr-slug"></code></p>
+        <p class="detail-meta">QR data: <code id="qr-data"></code></p>
       </div>
 
       <div class="preset-row">
@@ -270,14 +284,6 @@
             <option value="dark">Dark</option>
           </select>
         </label>
-      </div>
-
-      <div class="stack settings-block danger-zone">
-        <h3>Danger zone</h3>
-        <p class="hint">Permanently clears every saved QR style-version snapshot, for every redirect. Redirects
-          themselves are untouched — delete those individually from the Redirects list.</p>
-        <button type="button" id="wipe-history-btn" class="danger-btn">Wipe all QR style history</button>
-        <p id="wipe-history-status" class="status"></p>
       </div>
     </section>
   </main>
