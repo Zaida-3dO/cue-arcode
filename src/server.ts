@@ -45,7 +45,8 @@ export function createApp() {
   const STATIC_ASSET_EXTENSION = /\.[a-zA-Z0-9]+$/;
 
   app.get(/.*/, (req, res, next) => {
-    if (req.path.startsWith('/api/')) {
+    const lowerPath = req.path.toLowerCase();
+    if (lowerPath.startsWith('/api/') || lowerPath === '/api') {
       next();
       return;
     }

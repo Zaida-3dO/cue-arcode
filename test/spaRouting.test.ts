@@ -59,6 +59,27 @@ describe('SPA history-mode routing (catch-all fallback to index.html)', () => {
     expect(body).not.toContain('<title>CueArcode</title>');
   });
 
+  it('does NOT swallow an unknown /API/ path (uppercase) into the SPA shell', async () => {
+    const res = await fetch(`${baseUrl}/API/totally-fake-endpoint`);
+    expect(res.status).toBe(404);
+    const body = await res.text();
+    expect(body).not.toContain('<title>CueArcode</title>');
+  });
+
+  it('does NOT swallow a bare /api (no trailing slash) into the SPA shell', async () => {
+    const res = await fetch(`${baseUrl}/api`);
+    expect(res.status).toBe(404);
+    const body = await res.text();
+    expect(body).not.toContain('<title>CueArcode</title>');
+  });
+
+  it('does NOT swallow a bare /API (uppercase, no trailing slash) into the SPA shell', async () => {
+    const res = await fetch(`${baseUrl}/API`);
+    expect(res.status).toBe(404);
+    const body = await res.text();
+    expect(body).not.toContain('<title>CueArcode</title>');
+  });
+
   it('still 404s a genuinely missing static asset (file-extension path) instead of serving HTML', async () => {
     const res = await fetch(`${baseUrl}/nonexistent.js`);
     expect(res.status).toBe(404);
