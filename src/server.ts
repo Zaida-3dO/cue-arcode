@@ -35,6 +35,28 @@ export function createApp() {
   const publicDir = join(__dirname, '..', 'public');
   app.use(express.static(publicDir));
 
+  // SPA history-mode fallback: the frontend does client-side URL routing
+  // (/, /redirects/:slug, /redirects/:slug/qr, /settings) with no matching
+  // files on disk, so a direct navigation or refresh on any of those paths
+  // would otherwise 404 — express.static above only serves files that
+  // literally exist. Falls back to index.html for any GET that isn't an API
+  // call and doesn't look like a missing static asset (has a file
+  // extension), so the SPA shell boots and its own router takes over.
+  const STATIC_ASSET_EXTENSION = /\.[a-zA-Z0-9]+$/;
+
+  app.get(/.*/, (req, res, next) => {
+    const lowerPath = req.path.toLowerCase();
+    if (lowerPath.startsWith('/api/') || lowerPath === '/api') {
+      next();
+      return;
+    }
+    if (STATIC_ASSET_EXTENSION.test(req.path)) {
+      next();
+      return;
+    }
+    res.sendFile(join(publicDir, 'index.html'));
+  });
+
   // Centralised error handler — keeps route handlers free of try/catch boilerplate.
   app.use(
     (

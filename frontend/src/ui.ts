@@ -94,7 +94,6 @@ export function initUi(): void {
   // Which detail-view slug QR Studio was opened *from*, so its back button
   // returns there rather than jumping all the way to the top-level list.
   let qrStudioOrigin: string | null = null;
-  let currentView: View = 'list';
 
   const els = {
     // Nav + views
@@ -188,7 +187,6 @@ export function initUi(): void {
   // ---- View navigation ----
 
   function showView(view: View): void {
-    currentView = view;
     els.viewList.hidden = view !== 'list';
     els.viewDetail.hidden = view !== 'detail';
     els.viewQrStudio.hidden = view !== 'qr-studio';
@@ -199,13 +197,130 @@ export function initUi(): void {
     els.navSettings.classList.toggle('active', view === 'settings');
   }
 
+  // ---- URL routing ----
+  //
+  // Real URL-path routing for a single-page app, hand-rolled (no router
+  // library — the route set is tiny and fixed):
+  //   /                        -> list
+  //   /redirects/:slug         -> detail
+  //   /redirects/:slug/qr      -> qr-studio
+  //   /settings                -> settings
+  //
+  // `navigateTo` is the single choke point every in-app navigation goes
+  // through: it updates the visible section (via `showView`) AND keeps
+  // `location.pathname` in sync via the History API, so the URL bar, back
+  // button, and bookmarks/shared links all stay meaningful. The server's
+  // catch-all route (src/server.ts) serves index.html for any of these
+  // paths so a direct load/refresh works too.
+
+  interface NavParams {
+    slug?: string;
+  }
+
+  function pathForView(view: View, params: NavParams): string {
+    switch (view) {
+      case 'list':
+        return '/';
+      case 'settings':
+        return '/settings';
+      case 'detail':
+        return `/redirects/${encodeURIComponent(params.slug ?? '')}`;
+      case 'qr-studio':
+        return `/redirects/${encodeURIComponent(params.slug ?? '')}/qr`;
+    }
+  }
+
+  /**
+   * Updates the visible view AND the URL/history to match. Every call site
+   * that used to call `showView(...)` directly now routes through here
+   * instead, so the URL can never drift out of sync with what's on screen.
+   *
+   * `opts.fromPopstate` must be set when re-rendering in response to a
+   * `popstate` event (browser back/forward): the browser has *already*
+   * updated `location` for us in that case, so calling pushState/
+   * replaceState again would either duplicate a history entry or — worse —
+   * push a new *forward* entry on every single back-button press, which
+   * would break back/forward navigation entirely.
+   */
+  function navigateTo(view: View, params: NavParams = {}, opts: { replace?: boolean; fromPopstate?: boolean } = {}): void {
+    showView(view);
+    if (opts.fromPopstate) return;
+    const path = pathForView(view, params);
+    if (opts.replace) {
+      history.replaceState({ view, params }, '', path);
+    } else if (path !== location.pathname) {
+      history.pushState({ view, params }, '', path);
+    }
+  }
+
+  type Route =
+    | { view: 'list' }
+    | { view: 'settings' }
+    | { view: 'detail'; slug: string }
+    | { view: 'qr-studio'; slug: string };
+
+  function matchRoute(pathname: string): Route {
+    const qrMatch = /^\/redirects\/([^/]+)\/qr\/?$/.exec(pathname);
+    if (qrMatch) return { view: 'qr-studio', slug: decodeURIComponent(qrMatch[1] ?? '') };
+    const detailMatch = /^\/redirects\/([^/]+)\/?$/.exec(pathname);
+    if (detailMatch) return { view: 'detail', slug: decodeURIComponent(detailMatch[1] ?? '') };
+    if (pathname === '/settings' || pathname === '/settings/') return { view: 'settings' };
+    return { view: 'list' };
+  }
+
+  /**
+   * Re-derives the current view + params from `location.pathname` and
+   * renders it — shared by initial boot (once `redirects` has loaded) and
+   * the `popstate` handler (browser back/forward). Both of those cases pass
+   * `fromPopstate: true`: the URL is already correct, this call should only
+   * ever *render* it, never push/replace history for it — except when the
+   * URL points at a slug that no longer exists, where we deliberately
+   * replace the bad URL with `/` so it doesn't sit in history as a
+   * back-button trap.
+   */
+  async function resolveRoute(opts: { fromPopstate?: boolean } = {}): Promise<void> {
+    const route = matchRoute(location.pathname);
+    switch (route.view) {
+      case 'list':
+        navigateTo('list', {}, opts);
+        return;
+      case 'settings':
+        navigateTo('settings', {}, opts);
+        return;
+      case 'detail': {
+        const row = redirects.find((r) => r.slug === route.slug);
+        if (!row) {
+          navigateTo('list', {}, { replace: true });
+          return;
+        }
+        openDetail(route.slug, opts);
+        return;
+      }
+      case 'qr-studio': {
+        const row = redirects.find((r) => r.slug === route.slug);
+        if (!row) {
+          navigateTo('list', {}, { replace: true });
+          return;
+        }
+        qrStudioOrigin = route.slug;
+        await selectSlug(route.slug);
+        navigateTo('qr-studio', { slug: route.slug }, opts);
+        return;
+      }
+    }
+  }
+
+  window.addEventListener('popstate', () => {
+    void resolveRoute({ fromPopstate: true });
+  });
+
   els.navRedirects.addEventListener('click', (e) => {
     e.preventDefault();
-    showView('list');
+    navigateTo('list');
   });
   els.navSettings.addEventListener('click', (e) => {
     e.preventDefault();
-    showView('settings');
+    navigateTo('settings');
   });
 
   // ---- Theme (Settings) ----
@@ -430,7 +545,7 @@ export function initUi(): void {
 
   // ---- Detail view ----
 
-  function openDetail(slug: string): void {
+  function openDetail(slug: string, navOpts: { replace?: boolean; fromPopstate?: boolean } = {}): void {
     const row = redirects.find((r) => r.slug === slug);
     if (!row) return;
     detailSlug = slug;
@@ -444,7 +559,7 @@ export function initUi(): void {
     // while this slug's versions are still in flight.
     els.detailQrGallery.innerHTML = '';
     els.detailQrGallerySection.hidden = true;
-    showView('detail');
+    navigateTo('detail', { slug }, navOpts);
     void refreshDetailQrGallery(slug);
   }
 
@@ -477,7 +592,7 @@ export function initUi(): void {
         qrStudioOrigin = slug;
         void (async () => {
           await selectSlugWithVersion(slug, v.version);
-          showView('qr-studio');
+          navigateTo('qr-studio', { slug });
         })();
       });
       li.appendChild(btn);
@@ -486,7 +601,7 @@ export function initUi(): void {
   }
 
   els.detailBackBtn.addEventListener('click', () => {
-    showView('list');
+    navigateTo('list');
   });
 
   els.detailForm.addEventListener('submit', (e) => {
@@ -527,7 +642,7 @@ export function initUi(): void {
     qrStudioOrigin = slug;
     void (async () => {
       await selectSlug(slug);
-      showView('qr-studio');
+      navigateTo('qr-studio', { slug });
     })();
   });
 
@@ -536,7 +651,7 @@ export function initUi(): void {
     const slug = detailSlug;
     void (async () => {
       const deleted = await removeRedirect(slug);
-      if (deleted) showView('list');
+      if (deleted) navigateTo('list');
     })();
   });
 
@@ -674,7 +789,7 @@ export function initUi(): void {
     if (qrStudioOrigin) {
       openDetail(qrStudioOrigin);
     } else {
-      showView('list');
+      navigateTo('list');
     }
   });
 
@@ -894,6 +1009,21 @@ export function initUi(): void {
   initSlugDomainOptions();
   syncControlsFromOptions();
   scheduleRender();
-  showView(currentView);
-  void refreshRedirects();
+
+  // Show the correct view section immediately, synchronously, purely from
+  // the URL — before any data has loaded. This is what prevents a flash of
+  // the List view when deep-linking straight into /redirects/:slug (or its
+  // /qr variant): the right section is visible right away, just not yet
+  // populated (detail/QR-studio content needs `redirects`, fetched below).
+  showView(matchRoute(location.pathname).view);
+
+  void (async () => {
+    await refreshRedirects();
+    // Now that `redirects` has data, resolve (and populate) whatever view
+    // the URL actually points to — reusing the same path-matching +
+    // navigateTo plumbing the popstate handler uses. `fromPopstate: true`
+    // here means "the URL is already correct, just render it" — including
+    // the bad-slug case, which falls back to the list view without crashing.
+    await resolveRoute({ fromPopstate: true });
+  })();
 }
