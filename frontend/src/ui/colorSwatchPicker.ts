@@ -55,6 +55,9 @@ export function createColorSwatchPicker(opts: {
   popover.hidden = true;
   popover.setAttribute('role', 'dialog');
   popover.setAttribute('aria-label', `${opts.label} picker`);
+  // Fallback focus target for open()/the Tab trap in the (should-never-
+  // happen) case the popover has no focusable children.
+  popover.tabIndex = -1;
 
   const heading = document.createElement('p');
   heading.className = 'color-swatch-popover-label';
@@ -73,7 +76,6 @@ export function createColorSwatchPicker(opts: {
     swatchBtn.addEventListener('click', () => {
       setColorInternal(presetColor, true);
       close();
-      button.focus();
     });
     paletteEntries.push({ button: swatchBtn, value: presetColor });
     grid.appendChild(swatchBtn);
@@ -132,12 +134,10 @@ export function createColorSwatchPicker(opts: {
       e.preventDefault();
       if (commitHex()) {
         close();
-        button.focus();
       }
     } else if (e.key === 'Escape') {
       hexInput.value = color;
       close();
-      button.focus();
     }
   });
 
@@ -177,10 +177,32 @@ export function createColorSwatchPicker(opts: {
     const target = e.target as Node;
     if (!wrap.contains(target) && !popover.contains(target)) close();
   }
+  function getFocusableElements(): HTMLElement[] {
+    return Array.from(
+      popover.querySelectorAll<HTMLElement>('button, input, [tabindex]:not([tabindex="-1"])')
+    ).filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);
+  }
+
   function onDocumentKeydown(e: KeyboardEvent): void {
     if (e.key === 'Escape') {
       close();
-      button.focus();
+      return;
+    }
+    if (e.key === 'Tab') {
+      // Focus trap: while the popover is open, Tab/Shift+Tab must cycle only
+      // among its own focusable controls (palette swatches -> wheel -> hex
+      // input), never escaping into background page controls.
+      const focusable = getFocusableElements();
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   }
   // The popover lives in `document.body` with `position: fixed`, positioned
@@ -200,19 +222,54 @@ export function createColorSwatchPicker(opts: {
     if (left + popoverWidth > window.innerWidth - 8) {
       left = Math.max(8, window.innerWidth - popoverWidth - 8);
     }
-    popover.style.top = `${rect.bottom + 8}px`;
     popover.style.left = `${left}px`;
+
+    // Vertical clamping mirrors the horizontal logic above. Requires the
+    // popover to already be laid out (not `hidden`) so its real height is
+    // measurable — callers must reveal-but-hide-visually before calling
+    // this (see open()).
+    const popoverHeight = popover.getBoundingClientRect().height;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+
+    let top: number;
+    if (popoverHeight <= spaceBelow) {
+      // Default: open below the button.
+      top = rect.bottom + 8;
+    } else if (popoverHeight <= spaceAbove) {
+      // Doesn't fit below but does above — flip.
+      top = rect.top - 8 - popoverHeight;
+    } else {
+      // Fits neither fully (tiny viewport / button near both edges) — use
+      // whichever side has more room, then clamp so it's never rendered
+      // fully off-screen in either direction.
+      top = spaceBelow >= spaceAbove ? rect.bottom + 8 : rect.top - 8 - popoverHeight;
+      top = Math.max(8, Math.min(top, window.innerHeight - popoverHeight - 8));
+    }
+    popover.style.top = `${top}px`;
   }
 
   function open(): void {
-    reposition();
+    // Make the popover measurable (laid out) without visibly flashing it in
+    // the wrong spot: reveal it invisibly, measure + position, then reveal
+    // visually. `hidden` can't be measured; toggling `hidden` off first
+    // (with `visibility: hidden` masking it) avoids both problems.
+    popover.style.visibility = 'hidden';
     popover.hidden = false;
+    reposition();
+    popover.style.visibility = '';
+
     button.setAttribute('aria-expanded', 'true');
     hexInput.value = color;
     document.addEventListener('click', onDocumentClick, true);
     document.addEventListener('keydown', onDocumentKeydown, true);
     window.addEventListener('scroll', onWindowScrollOrResize, true);
     window.addEventListener('resize', onWindowScrollOrResize, true);
+
+    // Move focus into the popover (first palette swatch is the most useful
+    // landing spot) so keyboard users land inside the trap immediately.
+    const focusable = getFocusableElements();
+    (focusable[0] ?? popover).focus();
   }
   function close(): void {
     if (popover.hidden) return;
@@ -222,6 +279,9 @@ export function createColorSwatchPicker(opts: {
     document.removeEventListener('keydown', onDocumentKeydown, true);
     window.removeEventListener('scroll', onWindowScrollOrResize, true);
     window.removeEventListener('resize', onWindowScrollOrResize, true);
+    // Every close path (Escape, outside-click, palette selection, hex
+    // commit/cancel) returns focus to the trigger button consistently.
+    button.focus();
   }
 
   button.addEventListener('click', (e) => {
