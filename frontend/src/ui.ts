@@ -31,6 +31,22 @@ function byId<T extends HTMLElement>(id: string): T {
   return el as T;
 }
 
+/**
+ * Builds a `<a>` for a redirect-card "Short link"/"Points to" value that
+ * opens `href` in a new tab. `.textContent` and `.href` are both set as DOM
+ * properties — never string-templated into innerHTML — matching the
+ * XSS-safe discipline used throughout `renderRedirectList()`.
+ */
+function createExternalLinkValue(href: string, className: string): HTMLAnchorElement {
+  const a = document.createElement('a');
+  a.className = className;
+  a.textContent = href;
+  a.href = href;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  return a;
+}
+
 // Maps each of the 6 dot Style values onto the nearest of the 3 stepped Radius
 // options. Lets the Style→Radius sync be bidirectional: when the Style
 // dropdown is changed directly, the Radius dropdown updates to the matching
@@ -124,7 +140,7 @@ export function initUi(): void {
     detailDisplayNameInput: byId<HTMLInputElement>('detail-display-name-input'),
     detailTargetUrlInput: byId<HTMLInputElement>('detail-target-url-input'),
     detailSaveStatus: byId<HTMLParagraphElement>('detail-save-status'),
-    detailRedirectUrl: byId<HTMLElement>('detail-redirect-url'),
+    detailRedirectUrl: byId<HTMLAnchorElement>('detail-redirect-url'),
     detailGenerateQrBtn: byId<HTMLButtonElement>('detail-generate-qr-btn'),
     detailDeleteBtn: byId<HTMLButtonElement>('detail-delete-btn'),
     detailQrGallerySection: byId<HTMLElement>('detail-qr-gallery-section'),
@@ -543,11 +559,15 @@ export function initUi(): void {
       const li = document.createElement('li');
       li.className = 'redirect-card';
 
-      // Everything below is built via createElement + textContent, never
-      // innerHTML interpolation: display_name and target_url are both
+      // Everything below is built via createElement + textContent (and, for
+      // the two link values, the `.href` DOM property), never innerHTML
+      // interpolation: display_name and target_url are both
       // attacker-influenced (a redirect's label and target), so
       // string-templating either into innerHTML would be a stored-XSS sink.
-      // textContent escapes everything — same discipline for both fields.
+      // textContent/`.href` escapes everything — same discipline for both
+      // fields. target_url is additionally server-validated (isValidTargetUrl
+      // in src/routes/redirects.ts) to be a well-formed http(s) URL rejecting
+      // `<>"'\`` before it ever reaches here.
       const body = document.createElement('div');
       body.className = 'card-body';
       body.tabIndex = 0;
@@ -564,9 +584,7 @@ export function initUi(): void {
       const shortLabel = document.createElement('span');
       shortLabel.className = 'card-label';
       shortLabel.textContent = 'Short link';
-      const shortValue = document.createElement('code');
-      shortValue.className = 'card-value';
-      shortValue.textContent = r.redirect_url;
+      const shortValue = createExternalLinkValue(r.redirect_url, 'card-value');
       shortRow.append(shortLabel, shortValue);
       body.appendChild(shortRow);
 
@@ -575,15 +593,21 @@ export function initUi(): void {
       const targetLabel = document.createElement('span');
       targetLabel.className = 'card-label';
       targetLabel.textContent = 'Points to';
-      const targetValue = document.createElement('code');
-      targetValue.className = 'card-value card-value-wrap';
-      targetValue.textContent = r.target_url;
+      const targetValue = createExternalLinkValue(r.target_url, 'card-value card-value-wrap');
       targetRow.append(targetLabel, targetValue);
       body.appendChild(targetRow);
 
       const openThisDetail = () => openDetail(r.slug);
-      body.addEventListener('click', openThisDetail);
+      body.addEventListener('click', (e) => {
+        // Let the short-link/target-url anchors handle their own click
+        // (open in a new tab) instead of *also* navigating this card into
+        // the Detail view — click events bubble from the anchor up to the
+        // card body, so without this guard both actions would fire.
+        if ((e.target as HTMLElement | null)?.closest('a')) return;
+        openThisDetail();
+      });
       body.addEventListener('keydown', (e) => {
+        if ((e.target as HTMLElement | null)?.closest('a')) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           openThisDetail();
@@ -611,6 +635,11 @@ export function initUi(): void {
     els.detailDisplayNameInput.value = row.display_name;
     els.detailTargetUrlInput.value = row.target_url;
     els.detailRedirectUrl.textContent = row.redirect_url;
+    // Set via the DOM property (not string-templated into innerHTML) — same
+    // XSS-safe discipline as the .textContent assignments here. redirect_url
+    // is always server-constructed (`${REDIRECT_BASE_URL}/${slug}`), never a
+    // user-supplied whole string, so it's inherently safe as an href too.
+    els.detailRedirectUrl.href = row.redirect_url;
     els.detailSaveStatus.textContent = '';
     // Clear synchronously so a stale previous slug's gallery never flashes
     // while this slug's versions are still in flight.
