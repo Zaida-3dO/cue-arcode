@@ -111,6 +111,12 @@ export function initUi(): void {
   // Which detail-view slug QR Studio was opened *from*, so its back button
   // returns there rather than jumping all the way to the top-level list.
   let qrStudioOrigin: string | null = null;
+  // Which preset (Classic/Rounded/Bold) was most recently clicked, for the
+  // preset buttons' selected-state feedback. Deliberately doesn't try to
+  // track whether the user has since manually diverged from that preset by
+  // tweaking an individual control — it's honest "this is the preset you
+  // last clicked" feedback, not a full style-diffing feature.
+  let lastAppliedPreset: string | null = null;
 
   const els = {
     // Nav + views
@@ -767,6 +773,10 @@ export function initUi(): void {
     // otherwise it's plain defaults.
     const versions = await listStyleVersions(slug);
     options = resolveOptionsForTarget(targetData, versions, preferredVersion);
+    // A newly-selected slug never has a "just clicked" preset, regardless
+    // of what was last clicked for a previously-viewed slug's QR Studio.
+    lastAppliedPreset = null;
+    syncPresetSelectedState();
     syncControlsFromOptions();
     scheduleRender();
     renderHistory(versions);
@@ -881,11 +891,25 @@ export function initUi(): void {
 
   // ---- Preset buttons ----
 
-  document.querySelectorAll<HTMLButtonElement>('.preset-btn').forEach((btn) => {
+  const presetButtons = document.querySelectorAll<HTMLButtonElement>('.preset-btn');
+
+  /** Reflects `lastAppliedPreset` onto every preset button's visual + a11y selected-state. */
+  function syncPresetSelectedState(): void {
+    presetButtons.forEach((btn) => {
+      const isSelected = lastAppliedPreset !== null && btn.dataset.preset === lastAppliedPreset;
+      btn.classList.toggle('is-selected', isSelected);
+      btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+    });
+  }
+  syncPresetSelectedState();
+
+  presetButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.preset;
       if (!key || !(key in PRESETS)) return;
       options = { ...options, ...structuredClone(PRESETS[key]) } as AppQrOptions;
+      lastAppliedPreset = key;
+      syncPresetSelectedState();
       syncControlsFromOptions();
       scheduleRender();
     });
