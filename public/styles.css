@@ -7,7 +7,13 @@
   --primary: #3b5bfd;
   --primary-fg: #ffffff;
   --accent: #0f9d8f;
-  --danger: #d6455a;
+  /* #d6455a measured 4.32:1 against --danger-fg white — under the WCAG AA
+     4.5:1 minimum for normal text. Darkened to clear it with margin
+     (computes to ~4.92:1 via this app's own contrastRatio() formula,
+     frontend/src/qr/contrast.ts) while still reading clearly as red, not
+     muddy/brown. Kept in sync with the :root[data-theme="light"] override
+     below per the existing pattern. */
+  --danger: #c93d50;
   --danger-fg: #ffffff;
   --warn: #b3540c;
 
@@ -33,6 +39,27 @@
 
   --shadow-sm: 0 1px 2px rgba(22, 22, 26, 0.07), 0 1px 1px rgba(22, 22, 26, 0.05);
   --shadow-md: 0 8px 20px rgba(22, 22, 26, 0.10), 0 2px 6px rgba(22, 22, 26, 0.06);
+
+  /* ---- Typography scale ----
+     Design-auditor was counting 11 distinct rendered font-sizes (and, as a
+     downstream effect, 11 distinct computed line-heights, since every
+     element inherits `body`'s single 1.5 ratio and computed line-height is
+     font-size × ratio). Consolidated to 6 named sizes — every font-size
+     declaration in this file should reference one of these, not a raw rem
+     value. Line-height is now varied deliberately by role (tight for
+     headings, snug for small print, normal — the existing body default —
+     for everything else) instead of blanket 1.5, which further collapses
+     the distinct-computed-value count. */
+  --text-xs: 0.75rem;   /* 12px */
+  --text-sm: 0.875rem;  /* 14px */
+  --text-base: 1rem;    /* 16px */
+  --text-md: 1.125rem;  /* 18px */
+  --text-lg: 1.25rem;   /* 20px */
+  --text-xl: 1.5rem;    /* 24px */
+
+  --leading-tight: 1.25;  /* headings/display text: --text-lg, --text-xl */
+  --leading-normal: 1.5;  /* body/UI text: --text-base, --text-sm (body default) */
+  --leading-snug: 1.4;    /* small print: --text-xs */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -66,7 +93,7 @@
   --primary: #3b5bfd;
   --primary-fg: #ffffff;
   --accent: #0f9d8f;
-  --danger: #d6455a;
+  --danger: #c93d50;
   --danger-fg: #ffffff;
   --warn: #b3540c;
   --shadow-sm: 0 1px 2px rgba(22, 22, 26, 0.07), 0 1px 1px rgba(22, 22, 26, 0.05);
@@ -107,8 +134,8 @@
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  font-size: 1rem;
-  line-height: 1.5;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
   background: var(--bg);
   color: var(--fg);
 }
@@ -125,7 +152,8 @@ body {
 
 .topbar h1 {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: var(--text-lg);
+  line-height: var(--leading-tight);
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--accent);
@@ -133,7 +161,7 @@ body {
 
 .subtitle {
   margin: 0.2rem 0 0;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   opacity: 0.7;
 }
 
@@ -148,7 +176,7 @@ body {
   color: var(--fg);
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: var(--text-base);
   opacity: 0.65;
   padding-bottom: 0.2rem;
   border-bottom: 2px solid transparent;
@@ -199,12 +227,13 @@ h3 {
 }
 
 h2 {
-  font-size: 1.2rem;
+  font-size: var(--text-lg);
+  line-height: var(--leading-tight);
   font-weight: 700;
 }
 
 h3 {
-  font-size: 1rem;
+  font-size: var(--text-base);
   font-weight: 700;
 }
 
@@ -215,7 +244,8 @@ h3 {
    label lets the identity heading below it read as clearly the most
    prominent text on the view, while it stays a real heading for a11y. */
 .eyebrow-heading {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -229,7 +259,8 @@ h3 {
    higher-contrast than the plain h2/h3 accent-teal scale above, so it reads
    as the single most prominent element on its view. */
 .identity-heading {
-  font-size: 1.6rem;
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--fg);
@@ -247,7 +278,7 @@ label {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 /* Labels wrapping a checkbox (e.g. "Background enabled", "Border enabled")
@@ -369,7 +400,7 @@ fieldset {
 legend {
   padding: 0 0.4rem;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 /* QR Studio's advanced-settings sections: native <details>/<summary> so they
@@ -393,7 +424,7 @@ details.control-section[open] {
 details.control-section > summary {
   cursor: pointer;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   padding: 0.25rem 0;
   list-style: none;
   color: var(--accent);
@@ -439,13 +470,14 @@ details.history-section {
 }
 
 .hint {
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
   opacity: 0.7;
   margin: 0;
 }
 
 .status {
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   min-height: 1.2em;
   margin: 0;
 }
@@ -487,12 +519,6 @@ details.history-section {
   gap: var(--space-5);
 }
 
-@media (max-width: 1200px) {
-  .studio-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 .controls {
   max-height: 80vh;
   overflow-y: auto;
@@ -504,6 +530,71 @@ details.history-section {
   flex-direction: column;
   gap: var(--space-4);
   align-items: flex-start;
+}
+
+/* ---- Responsive breakpoints ----
+   Three deliberately distinct treatments, not one collapse point reused
+   at shrinking widths:
+   - >1200px: desktop — two-column studio grid, preview left-anchored
+     next to the controls column it's paired with.
+   - 768-1200px (tablet): studio grid collapses to one column. With the
+     controls column no longer constraining the row's width, the preview
+     column would otherwise sit left-anchored in a much wider single
+     column, leaving a large dead-space gap to its right (confirmed live
+     at 768px) — centering it here fixes that and reads as a deliberate
+     tablet layout instead of "desktop, collapsed". Panel/card chrome is
+     also tightened slightly since single-column tablet width is a
+     different reading context than the two-column desktop grid it
+     inherited padding from.
+   - <600px (phone): further tightened layout padding, and list-card rows
+     switch from a label+value baseline row to a stacked layout — at
+     desktop/tablet widths the label ("Short link"/"Points to") and a
+     wrapped multi-line value share a row reasonably, but at phone widths
+     the fixed-width label eats too much of the already-narrow row. */
+@media (max-width: 1200px) {
+  .studio-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-col {
+    align-items: center;
+  }
+
+  .panel {
+    padding: var(--space-3) var(--space-4) var(--space-4);
+  }
+
+  .controls {
+    max-height: none;
+  }
+
+  .card-label {
+    min-width: 4.5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .layout {
+    padding: 1rem 0.75rem;
+  }
+
+  .panel {
+    padding: var(--space-3) var(--space-3) var(--space-4);
+  }
+
+  .card-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+  }
+
+  .card-label {
+    min-width: 0;
+  }
+
+  .preset-row {
+    gap: var(--space-1);
+  }
 }
 
 .qr-preview {
@@ -525,7 +616,7 @@ details.history-section {
 
 .warning {
   color: var(--warn);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
@@ -535,6 +626,35 @@ details.history-section {
   gap: var(--space-2);
   margin: var(--space-2) 0 var(--space-4);
   flex-wrap: wrap;
+}
+
+/* ---- QR Studio button hierarchy ----
+   Presets/Test Scan/Export/"Save style" were previously all the same
+   solid --primary button — "Save style" persists a new version while the
+   rest are one-click preview/utility actions, so it's the only one that
+   should read as a commitment. "Save style" (plain <button>, no extra
+   class — see index.html) stays the sole solid-primary button on this
+   view; presets, Test Scan, and Export are downgraded to the same
+   secondary weight (transparent fill, bordered) as `.secondary-btn`
+   elsewhere in the app, so text stays fully readable — not a ghost
+   button that vanishes in dark mode — only the fill/border-vs-solid
+   distinction carries the "this isn't the primary action" signal. */
+.preset-btn {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+
+/* Selected-state ring reuses the exact visual language already
+   established by .color-swatch-option.is-selected (visible border +
+   thin --bg gap ring) rather than inventing a new pattern — scaled up
+   and recolored to --primary since these are rectangular secondary
+   buttons, not small round swatches. */
+.preset-btn.is-selected {
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--bg), 0 0 0 3px var(--primary);
 }
 
 .redirect-list,
@@ -556,7 +676,7 @@ details.history-section {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 /* ---- Create-redirect form (list view) ---- */
@@ -571,7 +691,7 @@ details.history-section {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .create-field-name {
@@ -583,13 +703,13 @@ details.history-section {
 }
 
 .control-label-prominent {
-  font-size: 1rem;
+  font-size: var(--text-base);
   font-weight: 700;
   color: var(--accent);
 }
 
 .input-prominent {
-  font-size: 1.1rem;
+  font-size: var(--text-md);
   font-weight: 600;
   padding: 0.55rem 0.6rem;
 }
@@ -615,7 +735,8 @@ details.history-section {
   border-right: 1px solid var(--border);
   background: var(--panel-bg);
   padding: 0.4rem 0.5rem;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
   color: var(--fg);
   opacity: 0.85;
   cursor: pointer;
@@ -668,7 +789,7 @@ details.history-section {
 }
 
 .card-title {
-  font-size: 1.1rem;
+  font-size: var(--text-md);
   font-weight: 700;
   color: var(--fg);
 }
@@ -677,29 +798,33 @@ details.history-section {
   display: flex;
   align-items: baseline;
   gap: 0.5rem;
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
 }
 
 .card-label {
   flex: 0 0 auto;
   min-width: 5.5rem;
   opacity: 0.6;
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
 
 /* Short-link/target-url values are real <a> anchors now (previously plain
-   <code> text), so unlike a native <code> element they don't get a
-   monospace font, inherited text color, or no-underline for free — restore
-   all three explicitly so the rendered appearance is unchanged from when
-   these were plain text, with an underline only appearing on hover/focus
-   as the sole visual cue that they're now clickable. */
+   <code> text). Unlike a native <code> element they don't get a monospace
+   font for free, so that's restored explicitly — but color is now the
+   app's global `a { color: var(--primary) }` link-blue (not `inherit`),
+   so these read as clickable at rest, matching every other link in the
+   app (topnav, "Back" links, etc.) instead of looking identical to inert
+   <code> text like the QR Studio identity header's "ID:" value. The
+   hover/focus underline is kept as an *additional* affordance layered on
+   top of the now-permanent color cue, not the only one. */
 .card-value {
   font-family: monospace;
-  color: inherit;
   text-decoration: none;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .card-value:hover,
@@ -708,7 +833,8 @@ details.history-section {
 }
 
 .card-value-wrap {
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .style-history .row-actions {
@@ -721,22 +847,23 @@ details.history-section {
 
 .detail-meta {
   opacity: 0.7;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .detail-meta code {
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 /* .detail-link-value is the Short link row's value — now a real <a>
-   anchor rather than a <code> element, so (same reasoning as .card-value
-   above) it needs the monospace font, inherited color, and no-underline
-   restored explicitly to keep the rendered appearance unchanged. */
+   anchor rather than a <code> element (same reasoning as .card-value
+   above): monospace font restored explicitly, but color is the app's
+   global link-blue (not `inherit`) so it reads as clickable at rest. */
 .detail-link-value {
   font-family: monospace;
-  color: inherit;
   text-decoration: none;
-  word-break: break-all;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .detail-link-value:hover,
@@ -845,7 +972,8 @@ details.history-section {
 
 .color-swatch-popover-label {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
   font-weight: 700;
   opacity: 0.7;
   text-transform: uppercase;
@@ -915,7 +1043,8 @@ details.history-section {
 }
 
 .color-swatch-hex-label {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
   opacity: 0.7;
   margin: 0;
 }
@@ -924,7 +1053,8 @@ details.history-section {
   flex: 1;
   min-width: 0;
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
   padding: 0.3rem 0.4rem;
 }
 

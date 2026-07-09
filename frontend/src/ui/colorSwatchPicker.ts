@@ -18,6 +18,29 @@ const PALETTE = [
   '#78716c', '#84cc16', '#f59e0b', '#10b981',
 ] as const;
 
+// Human-readable names for PALETTE, keyed by hex — used for the swatch
+// buttons' accessible name (a raw hex code like "#22c55e" is not
+// meaningful when announced by a screen reader). The exact hex stays
+// available to sighted users via `title`, so nothing is lost either way.
+const PALETTE_COLOR_NAMES: Record<string, string> = {
+  '#22c55e': 'Green',
+  '#3b82f6': 'Blue',
+  '#f97316': 'Orange',
+  '#06b6d4': 'Cyan',
+  '#ec4899': 'Pink',
+  '#a855f7': 'Purple',
+  '#eab308': 'Yellow',
+  '#14b8a6': 'Teal',
+  '#6366f1': 'Indigo',
+  '#f43f5e': 'Rose',
+  '#d946ef': 'Fuchsia',
+  '#0ea5e9': 'Sky',
+  '#78716c': 'Stone',
+  '#84cc16': 'Lime',
+  '#f59e0b': 'Amber',
+  '#10b981': 'Emerald',
+};
+
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 
 let uidCounter = 0;
@@ -72,7 +95,9 @@ export function createColorSwatchPicker(opts: {
     swatchBtn.type = 'button';
     swatchBtn.className = 'color-swatch-option';
     swatchBtn.style.backgroundColor = presetColor;
-    swatchBtn.setAttribute('aria-label', presetColor);
+    const colorName = PALETTE_COLOR_NAMES[presetColor] ?? presetColor;
+    swatchBtn.setAttribute('aria-label', `${colorName} (${presetColor})`);
+    swatchBtn.title = `${colorName} (${presetColor})`;
     swatchBtn.addEventListener('click', () => {
       setColorInternal(presetColor, true);
       close();
