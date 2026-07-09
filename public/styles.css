@@ -152,7 +152,7 @@ body {
 
 .topbar h1 {
   margin: 0;
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
   line-height: var(--leading-tight);
   font-weight: 800;
   letter-spacing: -0.01em;
