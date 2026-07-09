@@ -32,15 +32,39 @@ function byId<T extends HTMLElement>(id: string): T {
 }
 
 /**
- * Builds a `<a>` for a redirect-card "Short link"/"Points to" value that
- * opens `href` in a new tab. `.textContent` and `.href` are both set as DOM
- * properties — never string-templated into innerHTML — matching the
+ * Appends `url` to `el` as alternating text nodes and real `<wbr>` elements,
+ * inserting a break opportunity immediately after every `/`, `.`, and `-`
+ * (the standard "safe to break here" URL characters). `<wbr>` is a real DOM
+ * element the browser renders invisibly and excludes from copy-pasted text
+ * (unlike a zero-width-space character, which would corrupt anything copied
+ * from the link) — so the visible/copyable text stays byte-identical to
+ * `url` while gaining break points `overflow-wrap: anywhere` alone can't
+ * find on its own for URLs with a long unbroken prefix (e.g. the short-link
+ * base URL, which at mobile widths can consume nearly the whole line before
+ * the variable slug even starts, forcing a mid-word break without this).
+ * Built with createTextNode/createElement — never innerHTML — matching the
  * XSS-safe discipline used throughout `renderRedirectList()`.
+ */
+function appendWrappableUrlText(el: HTMLElement, url: string): void {
+  const segments = url.split(/(?<=[/.-])/);
+  for (const segment of segments) {
+    el.append(document.createTextNode(segment));
+    el.append(document.createElement('wbr'));
+  }
+}
+
+/**
+ * Builds a `<a>` for a redirect-card "Short link"/"Points to" value that
+ * opens `href` in a new tab. `.href` is set as a DOM property — never
+ * string-templated into innerHTML — matching the XSS-safe discipline used
+ * throughout `renderRedirectList()`. Visible text is built via
+ * `appendWrappableUrlText()` so long values wrap at `/`, `.`, `-` boundaries
+ * instead of arbitrary mid-word breaks.
  */
 function createExternalLinkValue(href: string, className: string): HTMLAnchorElement {
   const a = document.createElement('a');
   a.className = className;
-  a.textContent = href;
+  appendWrappableUrlText(a, href);
   a.href = href;
   a.target = '_blank';
   a.rel = 'noopener noreferrer';
@@ -640,11 +664,13 @@ export function initUi(): void {
     els.detailSlug.textContent = row.slug;
     els.detailDisplayNameInput.value = row.display_name;
     els.detailTargetUrlInput.value = row.target_url;
-    els.detailRedirectUrl.textContent = row.redirect_url;
+    els.detailRedirectUrl.textContent = '';
+    appendWrappableUrlText(els.detailRedirectUrl, row.redirect_url);
     // Set via the DOM property (not string-templated into innerHTML) — same
-    // XSS-safe discipline as the .textContent assignments here. redirect_url
-    // is always server-constructed (`${REDIRECT_BASE_URL}/${slug}`), never a
-    // user-supplied whole string, so it's inherently safe as an href too.
+    // XSS-safe discipline as the appendWrappableUrlText() call above.
+    // redirect_url is always server-constructed
+    // (`${REDIRECT_BASE_URL}/${slug}`), never a user-supplied whole string,
+    // so it's inherently safe as an href too.
     els.detailRedirectUrl.href = row.redirect_url;
     els.detailSaveStatus.textContent = '';
     // Clear synchronously so a stale previous slug's gallery never flashes
