@@ -150,9 +150,14 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* --text-xl, one step above h2's --text-lg: the type-scale consolidation
+   (see the token comment above) collapsed h1 and h2 onto the same 20px
+   step, differentiated only by font-weight (800 vs 700) — a hard-to-perceive
+   distinction. This is the one-line fix: keep h1 as the top of the scale so
+   the site banner reads as more prominent than page-level h2 headings. */
 .topbar h1 {
   margin: 0;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   line-height: var(--leading-tight);
   font-weight: 800;
   letter-spacing: -0.01em;

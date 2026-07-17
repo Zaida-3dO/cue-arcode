@@ -1091,6 +1091,12 @@ export function initUi(): void {
       actions.className = 'row-actions';
       const restoreBtn = document.createElement('button');
       restoreBtn.type = 'button';
+      // Secondary weight, not solid --primary: restoring a past version into
+      // the controls is a one-click, easily-undone preview action, not a
+      // data-committing one — "Save style" stays the sole solid-primary
+      // button on this view. Same treatment as Test Scan/Export/Presets
+      // (see the "QR Studio button hierarchy" comment in styles.css).
+      restoreBtn.className = 'secondary-btn';
       restoreBtn.textContent = 'Restore into controls';
       restoreBtn.addEventListener('click', () => {
         options = { ...options, ...(v.style as Partial<AppQrOptions>) } as AppQrOptions;
